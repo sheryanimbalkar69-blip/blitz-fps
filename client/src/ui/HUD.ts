@@ -377,57 +377,161 @@ export class GameHUD {
     const ctx = this.minimapCtx;
     const w = this.minimapCanvas.width;
     const h = this.minimapCanvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
 
     ctx.clearRect(0, 0, w, h);
 
-    // Radar background
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 2, w / 2 - 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Radar border & range rings
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(w / 2, h / 2, w / 4, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
-    ctx.stroke();
-
-    // Scale: map width 40m -> radar diameter
-    const scale = (w / 2) / 38;
-
-    // Center player arrow
+    // 1. Radar Circular Clip
     ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.rotate(pyaw);
-    ctx.fillStyle = '#38bdf8';
     ctx.beginPath();
-    ctx.moveTo(0, -6);
-    ctx.lineTo(4, 5);
-    ctx.lineTo(-4, 5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    ctx.arc(cx, cy, cx - 2, 0, Math.PI * 2);
+    ctx.clip();
 
-    // Draw other players relative to local player
+    // Radar Dark Grid Background
+    ctx.fillStyle = 'rgba(10, 15, 26, 0.92)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Radar Range Rings
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cx * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, cx * 0.85, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Map Scale: 80m map length -> fits radar view
+    const scale = (cx * 0.85) / 38;
+
+    // Transform world coordinates relative to local player
+    const worldToRadar = (wx: number, wz: number) => {
+      return {
+        x: cx + (wx - px) * scale,
+        y: cy + (wz - pz) * scale
+      };
+    };
+
+    // 2. Draw Nuketown Road & Cul-de-sac
+    const rLeft = worldToRadar(-12, -40);
+    const rRight = worldToRadar(12, 40);
+    ctx.fillStyle = 'rgba(51, 65, 85, 0.6)';
+    ctx.fillRect(rLeft.x, rLeft.y, (24 * scale), (80 * scale));
+
+    const culDeSac = worldToRadar(0, 0);
+    ctx.beginPath();
+    ctx.arc(culDeSac.x, culDeSac.y, 13 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(71, 85, 105, 0.7)';
+    ctx.fill();
+
+    // 3. Draw House Alpha (North / Green House)
+    const hA = worldToRadar(-7, -32);
+    ctx.fillStyle = 'rgba(20, 184, 166, 0.5)';
+    ctx.strokeStyle = '#14b8a6';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(hA.x, hA.y, 14 * scale, 16 * scale);
+    ctx.strokeRect(hA.x, hA.y, 14 * scale, 16 * scale);
+
+    // 4. Draw House Bravo (South / Yellow House)
+    const hB = worldToRadar(-7, 16);
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.5)';
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(hB.x, hB.y, 14 * scale, 16 * scale);
+    ctx.strokeRect(hB.x, hB.y, 14 * scale, 16 * scale);
+
+    // 5. Draw Center School Bus & Moving Truck
+    const busPos = worldToRadar(-3.5, 1.0);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(busPos.x - 1.5 * scale, busPos.y - 4.5 * scale, 3 * scale, 9 * scale);
+
+    const truckPos = worldToRadar(4.0, -1.0);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(truckPos.x - 1.5 * scale, truckPos.y - 5.5 * scale, 3 * scale, 11 * scale);
+
+    // 6. Draw Active Hardpoint Zone (Pulsing Yellow Box with 'HP')
+    const hpDefs = [
+      { x: 0, z: 0, w: 9, d: 10 },     // HP 1: Center
+      { x: -1, z: -24, w: 10, d: 8 },  // HP 2: House A
+      { x: 0, z: 36, w: 10, d: 8 },    // HP 3: Patio B
+      { x: 0, z: -36, w: 10, d: 8 },   // HP 4: Patio A
+      { x: 1, z: 24, w: 10, d: 8 }     // HP 5: House B
+    ];
+    const currentHp = hpDefs[zoneIdx] || hpDefs[0];
+    const hpCenter = worldToRadar(currentHp.x, currentHp.z);
+    const pulseAlpha = 0.5 + Math.sin(Date.now() * 0.006) * 0.3;
+
+    ctx.fillStyle = `rgba(250, 204, 21, ${pulseAlpha})`;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(
+      hpCenter.x - (currentHp.w * scale) / 2,
+      hpCenter.y - (currentHp.d * scale) / 2,
+      currentHp.w * scale,
+      currentHp.d * scale
+    );
+    ctx.strokeRect(
+      hpCenter.x - (currentHp.w * scale) / 2,
+      hpCenter.y - (currentHp.d * scale) / 2,
+      currentHp.w * scale,
+      currentHp.d * scale
+    );
+
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('HP', hpCenter.x, hpCenter.y);
+
+    // 7. Draw Other Players & Bots
     for (const p of players) {
       if (p.isDead) continue;
-      const dx = (p.x - px) * scale;
-      const dz = (p.z - pz) * scale;
-
-      const screenX = w / 2 + dx;
-      const screenY = h / 2 + dz;
-
-      // Inside radar circle
-      if (Math.hypot(screenX - w / 2, screenY - h / 2) < w / 2 - 4) {
-        ctx.fillStyle = p.team === 'ALPHA' ? '#60a5fa' : '#f97316';
+      const pPos = worldToRadar(p.x, p.z);
+      if (Math.hypot(pPos.x - cx, pPos.y - cy) < cx - 4) {
+        ctx.fillStyle = p.team === 'ALPHA' ? '#38bdf8' : '#f97316';
         ctx.beginPath();
-        ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
+        ctx.arc(pPos.x, pPos.y, 3.5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
     }
+
+    // 8. Draw Local Player Chevron in Center
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-pyaw + Math.PI);
+    ctx.fillStyle = '#22c55e'; // Bright green tactical arrow
+    ctx.beginPath();
+    ctx.moveTo(0, -7);
+    ctx.lineTo(5, 5);
+    ctx.lineTo(0, 2);
+    ctx.lineTo(-5, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore(); // End Circular Clip
+
+    // Outer Tactical Ring & Compass Markers
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cx - 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', cx, 11);
+    ctx.fillText('S', cx, h - 3);
+    ctx.fillText('W', 7, cy + 3);
+    ctx.fillText('E', w - 7, cy + 3);
   }
 }

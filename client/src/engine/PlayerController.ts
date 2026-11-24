@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PlayerInputPacket, WEAPON_REGISTRY, WeaponDef } from '../../../shared/packets';
 import { sounds } from './Audio';
-import { CollidableBox } from './Map';
+import { CollidableBox, WalkableRamp } from './Map';
 
 export class PlayerController {
   public camera: THREE.PerspectiveCamera;
@@ -55,48 +55,82 @@ export class PlayerController {
     this.weaponGroup = new THREE.Group();
     this.weaponGroup.position.set(0.24, -0.26, -0.45); // Standard hip-fire offset
 
-    // Procedural tactical rifle mesh (Receiver, Barrel, Magazine, Stock, Sights)
-    const gunMat = new THREE.MeshLambertMaterial({ color: 0x1f242d });
-    const metalMat = new THREE.MeshLambertMaterial({ color: 0x374151 });
-    const tanMat = new THREE.MeshLambertMaterial({ color: 0x854d0e }); // Grip
+    const gunBodyMat = new THREE.MeshStandardMaterial({ color: 0x1e242b, roughness: 0.35, metalness: 0.65 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.25, metalness: 0.85 });
+    const tanGripMat = new THREE.MeshStandardMaterial({ color: 0x925c28, roughness: 0.8 }); // Magpul FDE Tan
 
-    // Main receiver
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.35), gunMat);
+    // Main Upper & Lower Receiver
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.095, 0.38), gunBodyMat);
     this.weaponGroup.add(receiver);
 
-    // Barrel + handguard
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.28), metalMat);
-    barrel.position.set(0, 0.02, -0.3);
+    // Ejection port
+    const port = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.08), metalMat);
+    port.position.set(0.033, 0.02, 0.02);
+    this.weaponGroup.add(port);
+
+    // M4 Carbine Handguard with Quad Rails
+    const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.065, 0.26), gunBodyMat);
+    handguard.position.set(0, 0.01, -0.3);
+    this.weaponGroup.add(handguard);
+
+    // Fluted Barrel
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.22, 12), metalMat);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.015, -0.5);
     this.weaponGroup.add(barrel);
 
-    // Muzzle brake
-    const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.05, 8), metalMat);
-    muzzle.rotation.x = Math.PI / 2;
-    muzzle.position.set(0, 0.02, -0.46);
-    this.weaponGroup.add(muzzle);
+    // Flash Hider / Compensator
+    const flashHider = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.06, 8), metalMat);
+    flashHider.rotation.x = Math.PI / 2;
+    flashHider.position.set(0, 0.015, -0.63);
+    this.weaponGroup.add(flashHider);
 
-    // Curved magazine
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.08), metalMat);
-    mag.position.set(0, -0.1, -0.06);
-    mag.rotation.x = 0.2;
+    // Tactical Curved 30-Round Magazine
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.18, 0.085), metalMat);
+    mag.position.set(0, -0.11, -0.06);
+    mag.rotation.x = 0.22;
     this.weaponGroup.add(mag);
 
-    // Tactical grip
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.13, 0.055), tanMat);
-    grip.position.set(0, -0.09, 0.11);
-    grip.rotation.x = -0.35;
+    // Ergonomic Pistol Grip
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.14, 0.06), tanGripMat);
+    grip.position.set(0, -0.1, 0.12);
+    grip.rotation.x = -0.38;
     this.weaponGroup.add(grip);
 
-    // Sights / Picatinny rail
-    const sights = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.15), metalMat);
-    sights.position.set(0, 0.06, 0.0);
-    this.weaponGroup.add(sights);
+    // Tactical Crane Stock (Cheek rest)
+    const bufferTube = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.16, 10), metalMat);
+    bufferTube.rotation.x = Math.PI / 2;
+    bufferTube.position.set(0, 0.02, 0.26);
+    this.weaponGroup.add(bufferTube);
 
-    // Green Tritium Iron Sight Dot
-    const tritiumMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
-    const frontDot = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.008, 0.006), tritiumMat);
-    frontDot.position.set(0, 0.075, -0.44);
-    this.weaponGroup.add(frontDot);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.15), tanGripMat);
+    stock.position.set(0, -0.02, 0.32);
+    this.weaponGroup.add(stock);
+
+    // Holographic Sight (EOTech Style Optic Housing)
+    const opticBase = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.12), metalMat);
+    opticBase.position.set(0, 0.058, -0.04);
+    this.weaponGroup.add(opticBase);
+
+    const opticHood = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.06, 0.1), gunBodyMat);
+    opticHood.position.set(0, 0.09, -0.04);
+    this.weaponGroup.add(opticHood);
+
+    // Holographic Glass Lens with Illuminated Red Reticle
+    const glassLens = new THREE.Mesh(
+      new THREE.BoxGeometry(0.042, 0.048, 0.01),
+      new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35 })
+    );
+    glassLens.position.set(0, 0.09, -0.04);
+    this.weaponGroup.add(glassLens);
+
+    // Red Illuminated Center Dot Reticle
+    const reticleDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.003, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xef4444 })
+    );
+    reticleDot.position.set(0, 0.09, -0.04);
+    this.weaponGroup.add(reticleDot);
 
     this.camera.add(this.weaponGroup);
   }
@@ -168,20 +202,29 @@ export class PlayerController {
 
   public reload() {
     const w = WEAPON_REGISTRY[this.activeWeaponId];
-    if (w && !this.isReloading && this.ammo < w.magSize && this.reserveAmmo > 0) {
-      this.isReloading = true;
-      sounds.playReload();
-      setTimeout(() => {
-        const needed = w.magSize - this.ammo;
-        const add = Math.min(needed, this.reserveAmmo);
-        this.ammo += add;
-        this.reserveAmmo -= add;
-        this.isReloading = false;
-      }, w.reloadTime * 1000);
+    if (w && !this.isReloading) {
+      if (this.ammo < w.magSize && this.reserveAmmo > 0) {
+        this.isReloading = true;
+        sounds.playReload();
+        setTimeout(() => {
+          const needed = w.magSize - this.ammo;
+          const add = Math.min(needed, this.reserveAmmo);
+          this.ammo += add;
+          this.reserveAmmo -= add;
+          this.isReloading = false;
+        }, w.reloadTime * 1000);
+      } else if (this.ammo === w.magSize) {
+        // Weapon already full, play subtle inspection click
+        sounds.playReload();
+      }
     }
   }
 
-  public update(deltaSec: number, colliders: CollidableBox[]): { didFire: boolean; fireOrigin?: THREE.Vector3; fireDir?: THREE.Vector3 } {
+  public update(
+    deltaSec: number,
+    colliders: CollidableBox[],
+    ramps: WalkableRamp[] = []
+  ): { didFire: boolean; fireOrigin?: THREE.Vector3; fireDir?: THREE.Vector3 } {
     this.inputSeq++;
 
     // 1. Aim Down Sights (ADS)
@@ -230,24 +273,41 @@ export class PlayerController {
       }
     }
 
-    // 3. Jump and Gravity
+    // 3. Jump, Ramps and Gravity
     if (this.keys['Space'] && this.isGrounded) {
       this.vel.y = 5.2; // Jump velocity
       this.isGrounded = false;
     }
 
+    // Check if player is standing on any walkable ramp / stairs
+    let rampGroundY: number | null = null;
+    for (const r of ramps) {
+      const minZ = Math.min(r.startZ, r.endZ);
+      const maxZ = Math.max(r.startZ, r.endZ);
+      if (this.pos.x >= r.minX && this.pos.x <= r.maxX && this.pos.z >= minZ && this.pos.z <= maxZ) {
+        const factor = (this.pos.z - r.startZ) / (r.endZ - r.startZ);
+        rampGroundY = r.startY + factor * (r.endY - r.startY);
+        break;
+      }
+    }
+
+    // Check second floor platform (y = 3.9) inside houses
+    const isInsideUpperAlpha = (this.pos.x >= -6.8 && this.pos.x <= 6.8 && this.pos.z >= -31 && this.pos.z <= -17 && this.pos.y >= 4.5);
+    const isInsideUpperBravo = (this.pos.x >= -6.8 && this.pos.x <= 6.8 && this.pos.z >= 17 && this.pos.z <= 31 && this.pos.y >= 4.5);
+    const baseGroundHeight = (isInsideUpperAlpha || isInsideUpperBravo) ? 5.55 : (this.isCrouched ? 1.05 : 1.65);
+
+    const effectiveGround = rampGroundY !== null ? (rampGroundY + (this.isCrouched ? 1.05 : 1.65)) : baseGroundHeight;
+
     if (!this.isGrounded) {
       this.vel.y -= 14.8 * deltaSec; // Gravity
       this.pos.y += this.vel.y * deltaSec;
-      const groundHeight = this.isCrouched ? 1.05 : 1.65;
-      if (this.pos.y <= groundHeight) {
-        this.pos.y = groundHeight;
+      if (this.pos.y <= effectiveGround) {
+        this.pos.y = effectiveGround;
         this.vel.y = 0;
         this.isGrounded = true;
       }
     } else {
-      const targetHeight = this.isCrouched ? 1.05 : 1.65;
-      this.pos.y = THREE.MathUtils.lerp(this.pos.y, targetHeight, deltaSec * 12);
+      this.pos.y = THREE.MathUtils.lerp(this.pos.y, effectiveGround, deltaSec * 16);
     }
 
     // Keep within Nuketown bounds
@@ -262,7 +322,7 @@ export class PlayerController {
 
     // 4. Viewmodel Animation (Hip-fire vs ADS offset + Bobbing + Recoil)
     const hipPos = new THREE.Vector3(0.24, -0.26, -0.45);
-    const adsPos = new THREE.Vector3(0.0, -0.165, -0.32); // Centered iron sights
+    const adsPos = new THREE.Vector3(0.0, -0.09, -0.32); // Perfectly centered Holographic sight
     const targetViewmodelPos = this.isAiming ? adsPos : hipPos;
 
     // Head bobbing effect when walking
@@ -324,13 +384,16 @@ export class PlayerController {
   private tryMoveWithCollision(stepX: number, stepZ: number, colliders: CollidableBox[]) {
     const nextX = this.pos.x + stepX;
     const nextZ = this.pos.z + stepZ;
-    const playerRadius = 0.35;
+    const playerRadius = 0.32;
+    const playerFeetY = this.pos.y - 1.6;
+    const playerHeadY = this.pos.y + 0.2;
 
     let blockedX = false;
     let blockedZ = false;
 
     for (const box of colliders) {
-      if (this.pos.y > box.max.y || this.pos.y + 1.8 < box.min.y) continue;
+      // Check vertical overlap
+      if (playerFeetY > box.max.y || playerHeadY < box.min.y) continue;
 
       if (
         nextX + playerRadius > box.min.x &&

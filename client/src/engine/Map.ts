@@ -1,416 +1,683 @@
 import * as THREE from 'three';
 import { NUKETOWN_HARDPOINT_ZONES } from '../../../shared/packets';
+import { TextureGenerator } from './Textures';
 
 export interface CollidableBox {
   min: THREE.Vector3;
   max: THREE.Vector3;
 }
 
+export interface WalkableRamp {
+  minX: number;
+  maxX: number;
+  startZ: number;
+  endZ: number;
+  startY: number;
+  endY: number;
+}
+
 export class NuketownMap {
   public scene: THREE.Scene;
   public colliders: CollidableBox[] = [];
+  public ramps: WalkableRamp[] = [];
   public hardpointMeshes: THREE.Mesh[] = [];
   public activeZoneBeacon: THREE.Group | null = null;
 
+  // Shared PBR Textures
+  private grassTex: THREE.CanvasTexture;
+  private roadTex: THREE.CanvasTexture;
+  private sidewalkTex: THREE.CanvasTexture;
+  private tealTex: THREE.CanvasTexture;
+  private yellowTex: THREE.CanvasTexture;
+  private woodTex: THREE.CanvasTexture;
+  private roofTex: THREE.CanvasTexture;
+
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+
+    this.grassTex = TextureGenerator.createGrassTexture();
+    this.roadTex = TextureGenerator.createRoadTexture();
+    this.sidewalkTex = TextureGenerator.createSidewalkTexture();
+    this.tealTex = TextureGenerator.createTealSidingTexture();
+    this.yellowTex = TextureGenerator.createYellowSidingTexture();
+    this.woodTex = TextureGenerator.createWoodDeckTexture();
+    this.roofTex = TextureGenerator.createRoofShinglesTexture();
+
     this.buildTerrain();
     this.buildRoads();
-    this.buildHouseAlpha(); // Mint Teal House (North)
-    this.buildHouseBravo(); // Yellow House (South)
-    this.buildCenterVehicles(); // Yellow Bus & Westward Moving Truck
-    this.buildParkedCars();
-    this.buildFencesAndProps();
+    this.buildHouseAlphaHollow(); // Fully walkable North House
+    this.buildHouseBravoHollow(); // Fully walkable South House
+    this.buildWalkableBus();      // Walkable interior school bus
+    this.buildWalkableTruck();    // Walkable trailer with ramp
+    this.buildParkedVehicles();
+    this.buildDetailedProps();
     this.buildDoomsdayTower();
     this.buildHardpointVisuals();
   }
 
-  private addCollider(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number) {
+  public addCollider(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number) {
     this.colliders.push({
       min: new THREE.Vector3(minX, minY, minZ),
       max: new THREE.Vector3(maxX, maxY, maxZ)
     });
   }
 
+  public addRamp(minX: number, maxX: number, startZ: number, endZ: number, startY: number, endY: number) {
+    this.ramps.push({ minX, maxX, startZ, endZ, startY, endY });
+  }
+
   private buildTerrain() {
-    // Main terrain plane
     const terrainGeo = new THREE.PlaneGeometry(120, 160);
-    const terrainMat = new THREE.MeshLambertMaterial({ color: 0x5a7d36 }); // Suburban grass green
+    const terrainMat = new THREE.MeshStandardMaterial({
+      map: this.grassTex,
+      roughness: 0.85,
+      metalness: 0.05
+    });
     const terrain = new THREE.Mesh(terrainGeo, terrainMat);
     terrain.rotation.x = -Math.PI / 2;
     terrain.receiveShadow = true;
     this.scene.add(terrain);
 
-    // Desert mountains backdrop (surrounding nuclear test site)
-    const mountainGeo = new THREE.ConeGeometry(28, 35, 6);
-    const mountainMat = new THREE.MeshLambertMaterial({ color: 0x9c7a52 });
-    
+    // Desert Mountains surrounding perimeter
+    const mountainGeo = new THREE.ConeGeometry(32, 40, 7);
+    const mountainMat = new THREE.MeshStandardMaterial({
+      color: 0x8a6c4b,
+      roughness: 0.9
+    });
     const mountainPositions = [
-      [-65, 0, -90], [0, 0, -100], [65, 0, -90],
-      [-75, 0, 90], [0, 0, 100], [75, 0, 90],
-      [-85, 0, 0], [85, 0, 0]
+      [-65, 18, -90], [0, 20, -105], [65, 18, -90],
+      [-75, 18, 90], [0, 20, 105], [75, 18, 90],
+      [-85, 20, 0], [85, 20, 0]
     ];
-
     mountainPositions.forEach(([x, y, z]) => {
       const m = new THREE.Mesh(mountainGeo, mountainMat);
-      m.position.set(x, 15, z);
+      m.position.set(x, y, z);
       this.scene.add(m);
     });
   }
 
   private buildRoads() {
-    // Asphalt street
+    // Asphalt Street with painted lane markings
     const roadGeo = new THREE.PlaneGeometry(24, 80);
-    const roadMat = new THREE.MeshLambertMaterial({ color: 0x222225 });
+    const roadMat = new THREE.MeshStandardMaterial({
+      map: this.roadTex,
+      roughness: 0.8,
+      metalness: 0.1
+    });
     const road = new THREE.Mesh(roadGeo, roadMat);
     road.rotation.x = -Math.PI / 2;
     road.position.set(0, 0.02, 0);
     road.receiveShadow = true;
     this.scene.add(road);
 
-    // Center circular cul-de-sac roundabout (matching Image 2)
+    // Center Roundabout Cul-de-Sac Circle
     const circleGeo = new THREE.CircleGeometry(13, 32);
-    const circleMat = new THREE.MeshLambertMaterial({ color: 0x2d3036 });
+    const circleMat = new THREE.MeshStandardMaterial({
+      color: 0x27292e,
+      roughness: 0.75
+    });
     const circle = new THREE.Mesh(circleGeo, circleMat);
     circle.rotation.x = -Math.PI / 2;
     circle.position.set(0, 0.025, 0);
     circle.receiveShadow = true;
     this.scene.add(circle);
 
-    // Sidewalk concrete strips
-    const sidewalkMat = new THREE.MeshLambertMaterial({ color: 0xbfb8a8 });
-    const swLeft = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.15, 80), sidewalkMat);
-    swLeft.position.set(-13, 0.08, 0);
+    // Concrete Sidewalks with curbs
+    const sidewalkMat = new THREE.MeshStandardMaterial({
+      map: this.sidewalkTex,
+      roughness: 0.7
+    });
+    const curbMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.6 });
+
+    // West Sidewalk
+    const swLeft = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.2, 80), sidewalkMat);
+    swLeft.position.set(-13.5, 0.1, 0);
+    swLeft.receiveShadow = true;
     this.scene.add(swLeft);
 
-    const swRight = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.15, 80), sidewalkMat);
-    swRight.position.set(13, 0.08, 0);
+    const curbLeft = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 80), curbMat);
+    curbLeft.position.set(-12.0, 0.12, 0);
+    this.scene.add(curbLeft);
+
+    // East Sidewalk
+    const swRight = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.2, 80), sidewalkMat);
+    swRight.position.set(13.5, 0.1, 0);
+    swRight.receiveShadow = true;
     this.scene.add(swRight);
+
+    const curbRight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.25, 80), curbMat);
+    curbRight.position.set(12.0, 0.12, 0);
+    this.scene.add(curbRight);
   }
 
-  // House Alpha (North / Green-Teal House - Images 3 & 4)
-  private buildHouseAlpha() {
+  // Fully Walkable House Alpha (Mint Teal - North)
+  private buildHouseAlphaHollow() {
     const group = new THREE.Group();
-    group.position.set(0, 0, -24);
+    const tealMat = new THREE.MeshStandardMaterial({ map: this.tealTex, roughness: 0.65 });
+    const whiteTrimMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xc4a47c, roughness: 0.4 });
+    const roofMat = new THREE.MeshStandardMaterial({ map: this.roofTex, roughness: 0.8 });
+    const deckMat = new THREE.MeshStandardMaterial({ map: this.woodTex, roughness: 0.7 });
 
-    // Teal wall material & White trim
-    const tealMat = new THREE.MeshLambertMaterial({ color: 0x208c7a }); // Mint teal (CODM signature)
-    const whiteMat = new THREE.MeshLambertMaterial({ color: 0xedf2f7 });
-    const roofMat = new THREE.MeshLambertMaterial({ color: 0x4a5568 });
-    const woodMat = new THREE.MeshLambertMaterial({ color: 0xa0522d });
+    // 1. Ground Floor Parquet Floor
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(16, 0.2, 16), floorMat);
+    floor.position.set(0, 0.1, -24);
+    group.add(floor);
 
-    // Ground Floor: Living room + Kitchen
-    const mainBody = new THREE.Mesh(new THREE.BoxGeometry(14, 4.0, 16), tealMat);
-    mainBody.position.set(-1.0, 2.0, 0);
-    mainBody.castShadow = true;
-    group.add(mainBody);
-    this.addCollider(-8.0, 0, -32, 6.0, 4.0, -16);
+    // 2. Front Wall (z = -16) with 2.2m OPEN DOORWAY in center (x: -1.1 to 1.1)
+    // Left segment
+    const frontWallLeft = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), tealMat);
+    frontWallLeft.position.set(-4.05, 2.0, -16);
+    group.add(frontWallLeft);
+    this.addCollider(-7.0, 0, -16.2, -1.1, 3.8, -15.8);
 
-    // Garage Wing (East side)
-    const garage = new THREE.Mesh(new THREE.BoxGeometry(6, 3.5, 9), whiteMat);
-    garage.position.set(9.0, 1.75, 3.0);
-    garage.castShadow = true;
-    group.add(garage);
-    this.addCollider(6.0, 0, -25.5, 12.0, 3.5, -16.5);
+    // Right segment
+    const frontWallRight = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), tealMat);
+    frontWallRight.position.set(4.05, 2.0, -16);
+    group.add(frontWallRight);
+    this.addCollider(1.1, 0, -16.2, 7.0, 3.8, -15.8);
 
-    // Second Floor (Sniper bedroom)
-    const secondFloor = new THREE.Mesh(new THREE.BoxGeometry(12, 3.5, 12), tealMat);
-    secondFloor.position.set(-1.0, 5.75, 0);
-    secondFloor.castShadow = true;
+    // Doorway Lintel above front door
+    const frontDoorLintel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 0.25), whiteTrimMat);
+    frontDoorLintel.position.set(0, 3.3, -16);
+    group.add(frontDoorLintel);
+
+    // 3. Back Wall (z = -32) with 2.2m OPEN BACK DOOR to patio deck
+    const backWallLeft = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), tealMat);
+    backWallLeft.position.set(-4.05, 2.0, -32);
+    group.add(backWallLeft);
+    this.addCollider(-7.0, 0, -32.2, -1.1, 3.8, -31.8);
+
+    const backWallRight = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), tealMat);
+    backWallRight.position.set(4.05, 2.0, -32);
+    group.add(backWallRight);
+    this.addCollider(1.1, 0, -32.2, 7.0, 3.8, -31.8);
+
+    const backDoorLintel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 0.25), whiteTrimMat);
+    backDoorLintel.position.set(0, 3.3, -32);
+    group.add(backDoorLintel);
+
+    // 4. West Outer Wall (x = -7.0)
+    const westWall = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 16), tealMat);
+    westWall.position.set(-7.0, 2.0, -24);
+    group.add(westWall);
+    this.addCollider(-7.2, 0, -32, -6.8, 3.8, -16);
+
+    // 5. East Garage Wall (x = 7.0) with OPEN GARAGE ENTRANCE (z: -21 to -17)
+    const eastWallBack = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 11), tealMat);
+    eastWallBack.position.set(7.0, 2.0, -26.5);
+    group.add(eastWallBack);
+    this.addCollider(6.8, 0, -32, 7.2, 3.8, -21);
+
+    // Garage Roll-up Door Lintel (leaves 4m opening underneath!)
+    const garageLintel = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.2, 4.0), whiteTrimMat);
+    garageLintel.position.set(7.0, 3.3, -19);
+    group.add(garageLintel);
+
+    // 6. Interior Partition Wall (Separates Living Room and Kitchen with doorway)
+    const intWall = new THREE.Mesh(new THREE.BoxGeometry(5.0, 3.8, 0.2), whiteTrimMat);
+    intWall.position.set(-3.5, 2.0, -24);
+    group.add(intWall);
+    this.addCollider(-6.0, 0, -24.1, -1.0, 3.8, -23.9);
+
+    // 7. Second Floor Ceiling/Floor (y = 3.9) with sniper overlook
+    const secondFloor = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 14), floorMat);
+    secondFloor.position.set(0, 3.9, -24);
     group.add(secondFloor);
 
-    // Slanted Roof
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(11, 2.5, 4), roofMat);
-    roof.position.set(-1.0, 8.5, 0);
-    roof.rotation.y = Math.PI / 4;
-    group.add(roof);
+    // Second Floor Front Wall with OPEN SNIPER WINDOW (Overlooks Bus & Street)
+    const upperFrontLeft = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.0, 0.25), tealMat);
+    upperFrontLeft.position.set(-4.5, 5.5, -17);
+    group.add(upperFrontLeft);
+    this.addCollider(-7.0, 3.9, -17.2, -2.2, 7.0, -16.8);
 
-    // 2nd Floor Front Sniper Window (Window opening facing the street)
-    const windowFrameMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-    const frontWindow = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.8, 0.4), windowFrameMat);
-    frontWindow.position.set(-1.0, 5.8, 6.1);
-    group.add(frontWindow);
+    const upperFrontRight = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.0, 0.25), tealMat);
+    upperFrontRight.position.set(4.5, 5.5, -17);
+    group.add(upperFrontRight);
+    this.addCollider(2.2, 3.9, -17.2, 7.0, 7.0, -16.8);
 
-    // Backyard Wooden Deck & Balcony Stairs (Matching Image 5)
-    const deckMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
-    const patio = new THREE.Mesh(new THREE.BoxGeometry(12, 0.4, 6), deckMat);
-    patio.position.set(-1.0, 0.2, -11.0);
-    group.add(patio);
+    // Window Lintel & Sill
+    const windowSill = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.8, 0.3), whiteTrimMat);
+    windowSill.position.set(0, 4.4, -17);
+    group.add(windowSill);
 
-    // Exterior Staircase from backyard up to 2nd floor balcony
-    const stairGeo = new THREE.BoxGeometry(2.0, 0.3, 1.0);
-    for (let i = 0; i < 10; i++) {
-      const step = new THREE.Mesh(stairGeo, deckMat);
-      step.position.set(4.0, 0.3 + i * 0.38, -6.5 - i * 0.45);
-      group.add(step);
-    }
-
-    this.scene.add(group);
-  }
-
-  // House Bravo (South / Yellow-Wood House - Images 2 & 5)
-  private buildHouseBravo() {
-    const group = new THREE.Group();
-    group.position.set(0, 0, 24);
-
-    const yellowMat = new THREE.MeshLambertMaterial({ color: 0xd99b26 }); // Warm 1950s yellow
-    const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf7fafc });
-    const roofMat = new THREE.MeshLambertMaterial({ color: 0x5c3d28 });
-    const deckMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
-
-    // Ground Floor: Living Room
-    const mainBody = new THREE.Mesh(new THREE.BoxGeometry(14, 4.0, 16), yellowMat);
-    mainBody.position.set(1.0, 2.0, 0);
-    mainBody.castShadow = true;
-    group.add(mainBody);
-    this.addCollider(-6.0, 0, 16, 8.0, 4.0, 32);
-
-    // Garage Wing (West side)
-    const garage = new THREE.Mesh(new THREE.BoxGeometry(6, 3.5, 9), whiteMat);
-    garage.position.set(-9.0, 1.75, -3.0);
-    garage.castShadow = true;
-    group.add(garage);
-    this.addCollider(-12.0, 0, 16.5, -6.0, 3.5, 25.5);
-
-    // Second Floor
-    const secondFloor = new THREE.Mesh(new THREE.BoxGeometry(12, 3.5, 12), yellowMat);
-    secondFloor.position.set(1.0, 5.75, 0);
-    secondFloor.castShadow = true;
-    group.add(secondFloor);
+    const windowLintel = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.8, 0.3), whiteTrimMat);
+    windowLintel.position.set(0, 6.6, -17);
+    group.add(windowLintel);
 
     // Roof
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(11, 2.5, 4), roofMat);
-    roof.position.set(1.0, 8.5, 0);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(12, 3.2, 4), roofMat);
+    roof.position.set(0, 8.5, -24);
     roof.rotation.y = Math.PI / 4;
     group.add(roof);
 
-    // 2nd Floor Front Sniper Window
-    const windowFrameMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
-    const frontWindow = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.8, 0.4), windowFrameMat);
-    frontWindow.position.set(1.0, 5.8, -6.1);
-    group.add(frontWindow);
-
-    // Backyard Patio Deck (HP 3 Location!)
-    const patio = new THREE.Mesh(new THREE.BoxGeometry(12, 0.4, 6), deckMat);
-    patio.position.set(1.0, 0.2, 11.0);
+    // 8. Backyard Patio Deck (Walkable, HP 4 Zone)
+    const patio = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 8), deckMat);
+    patio.position.set(0, 0.2, -36);
     group.add(patio);
 
-    // Exterior Stairs leading up to balcony
-    const stairGeo = new THREE.BoxGeometry(2.0, 0.3, 1.0);
-    for (let i = 0; i < 10; i++) {
-      const step = new THREE.Mesh(stairGeo, deckMat);
-      step.position.set(-4.0, 0.3 + i * 0.38, 6.5 + i * 0.45);
+    // Pergola beams overhead
+    for (let x = -5; x <= 5; x += 2.5) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 8), deckMat);
+      beam.position.set(x, 3.2, -36);
+      group.add(beam);
+    }
+
+    // 9. Exterior Walkable Wooden Stairs from Patio up to 2nd Floor Balcony
+    const stairWidth = 1.8;
+    for (let i = 0; i < 12; i++) {
+      const stepY = 0.3 + i * 0.3;
+      const stepZ = -33.5 + i * 0.65;
+      const step = new THREE.Mesh(new THREE.BoxGeometry(stairWidth, 0.25, 0.7), deckMat);
+      step.position.set(5.5, stepY, stepZ);
       group.add(step);
     }
+    // Walkable Stair Ramp Collider (connects ground patio to 2nd floor balcony)
+    this.addRamp(4.5, 6.5, -34.0, -25.5, 0.2, 3.9);
+
+    // Front Porch with Pillars (Image 3)
+    const porch = new THREE.Mesh(new THREE.BoxGeometry(8, 0.25, 3), deckMat);
+    porch.position.set(0, 0.15, -14.5);
+    group.add(porch);
+
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc });
+    const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.5, 0.3), pillarMat);
+    p1.position.set(-3.5, 1.8, -13.2);
+    group.add(p1);
+    const p2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.5, 0.3), pillarMat);
+    p2.position.set(3.5, 1.8, -13.2);
+    group.add(p2);
 
     this.scene.add(group);
   }
 
-  // Yellow School Bus & Westward Moving Truck (Images 3 & 4)
-  private buildCenterVehicles() {
-    // 1. YELLOW SCHOOL BUS (Angled ~22° in center cul-de-sac)
+  // Fully Walkable House Bravo (Yellow/Wood - South)
+  private buildHouseBravoHollow() {
+    const group = new THREE.Group();
+    const yellowMat = new THREE.MeshStandardMaterial({ map: this.yellowTex, roughness: 0.65 });
+    const whiteTrimMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xba8c59, roughness: 0.4 });
+    const roofMat = new THREE.MeshStandardMaterial({ map: this.roofTex, roughness: 0.8 });
+    const deckMat = new THREE.MeshStandardMaterial({ map: this.woodTex, roughness: 0.7 });
+
+    // 1. Ground Floor Floorboards
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(16, 0.2, 16), floorMat);
+    floor.position.set(0, 0.1, 24);
+    group.add(floor);
+
+    // 2. Front Wall (z = 16) with 2.2m OPEN DOORWAY in center
+    const frontWallLeft = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), yellowMat);
+    frontWallLeft.position.set(-4.05, 2.0, 16);
+    group.add(frontWallLeft);
+    this.addCollider(-7.0, 0, 15.8, -1.1, 3.8, 16.2);
+
+    const frontWallRight = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), yellowMat);
+    frontWallRight.position.set(4.05, 2.0, 16);
+    group.add(frontWallRight);
+    this.addCollider(1.1, 0, 15.8, 7.0, 3.8, 16.2);
+
+    const frontDoorLintel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 0.25), whiteTrimMat);
+    frontDoorLintel.position.set(0, 3.3, 16);
+    group.add(frontDoorLintel);
+
+    // 3. Back Wall (z = 32) with 2.2m OPEN DOORWAY to Patio (HP 3)
+    const backWallLeft = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), yellowMat);
+    backWallLeft.position.set(-4.05, 2.0, 32);
+    group.add(backWallLeft);
+    this.addCollider(-7.0, 0, 31.8, -1.1, 3.8, 32.2);
+
+    const backWallRight = new THREE.Mesh(new THREE.BoxGeometry(5.9, 3.8, 0.25), yellowMat);
+    backWallRight.position.set(4.05, 2.0, 32);
+    group.add(backWallRight);
+    this.addCollider(1.1, 0, 31.8, 7.0, 3.8, 32.2);
+
+    const backDoorLintel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 0.25), whiteTrimMat);
+    backDoorLintel.position.set(0, 3.3, 32);
+    group.add(backDoorLintel);
+
+    // 4. East Outer Wall (x = 7.0)
+    const eastWall = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 16), yellowMat);
+    eastWall.position.set(7.0, 2.0, 24);
+    group.add(eastWall);
+    this.addCollider(6.8, 0, 16, 7.2, 3.8, 32);
+
+    // 5. West Garage Wall with OPENING (x = -7.0, z: 17 to 21)
+    const westWallBack = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.8, 11), yellowMat);
+    westWallBack.position.set(-7.0, 2.0, 26.5);
+    group.add(westWallBack);
+    this.addCollider(-7.2, 0, 21, -6.8, 3.8, 32);
+
+    const garageLintel = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.2, 4.0), whiteTrimMat);
+    garageLintel.position.set(-7.0, 3.3, 19);
+    group.add(garageLintel);
+
+    // 6. Interior Partition Wall
+    const intWall = new THREE.Mesh(new THREE.BoxGeometry(5.0, 3.8, 0.2), whiteTrimMat);
+    intWall.position.set(3.5, 2.0, 24);
+    group.add(intWall);
+    this.addCollider(1.0, 0, 23.9, 6.0, 3.8, 24.1);
+
+    // 7. Second Floor with sniper overlook
+    const secondFloor = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 14), floorMat);
+    secondFloor.position.set(0, 3.9, 24);
+    group.add(secondFloor);
+
+    // Second Floor Front Wall with OPEN SNIPER WINDOW
+    const upperFrontLeft = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.0, 0.25), yellowMat);
+    upperFrontLeft.position.set(-4.5, 5.5, 17);
+    group.add(upperFrontLeft);
+    this.addCollider(-7.0, 3.9, 16.8, -2.2, 7.0, 17.2);
+
+    const upperFrontRight = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.0, 0.25), yellowMat);
+    upperFrontRight.position.set(4.5, 5.5, 17);
+    group.add(upperFrontRight);
+    this.addCollider(2.2, 3.9, 16.8, 7.0, 7.0, 17.2);
+
+    const windowSill = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.8, 0.3), whiteTrimMat);
+    windowSill.position.set(0, 4.4, 17);
+    group.add(windowSill);
+
+    const windowLintel = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.8, 0.3), whiteTrimMat);
+    windowLintel.position.set(0, 6.6, 17);
+    group.add(windowLintel);
+
+    // Roof
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(12, 3.2, 4), roofMat);
+    roof.position.set(0, 8.5, 24);
+    roof.rotation.y = Math.PI / 4;
+    group.add(roof);
+
+    // 8. Backyard Wooden Patio Deck (HP 3 Zone - Image 5)
+    const patio = new THREE.Mesh(new THREE.BoxGeometry(14, 0.3, 8), deckMat);
+    patio.position.set(0, 0.2, 36);
+    group.add(patio);
+
+    // 9. Exterior Walkable Stairs up to 2nd Floor
+    for (let i = 0; i < 12; i++) {
+      const stepY = 0.3 + i * 0.3;
+      const stepZ = 33.5 - i * 0.65;
+      const step = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.25, 0.7), deckMat);
+      step.position.set(-5.5, stepY, stepZ);
+      group.add(step);
+    }
+    this.addRamp(-6.5, -4.5, 34.0, 25.5, 0.2, 3.9);
+
+    // Front Porch
+    const porch = new THREE.Mesh(new THREE.BoxGeometry(8, 0.25, 3), deckMat);
+    porch.position.set(0, 0.15, 14.5);
+    group.add(porch);
+
+    this.scene.add(group);
+  }
+
+  // Walkable School Bus (Hollow Aisle & Walkable Roof / Sides - Image 3)
+  private buildWalkableBus() {
     const busGroup = new THREE.Group();
-    busGroup.position.set(-3.2, 0, 1.0);
-    busGroup.rotation.y = 0.38; // Diagonal tilt
+    busGroup.position.set(-3.5, 0, 1.0);
+    busGroup.rotation.y = 0.38; // 22° diagonal angle
 
-    const busYellow = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
-    const busBlack = new THREE.MeshLambertMaterial({ color: 0x18181b });
-    const glassMat = new THREE.MeshLambertMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.6 });
+    const yellowMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.5, metalness: 0.2 });
+    const blackMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.65, roughness: 0.1 });
 
-    // Main Bus Body
-    const busBody = new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.6, 9.5), busYellow);
-    busBody.position.set(0, 1.6, 0);
-    busBody.castShadow = true;
-    busGroup.add(busBody);
+    // 1. Bus Floor (y = 0.45)
+    const busFloor = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.2, 9.2), blackMat);
+    busFloor.position.set(0, 0.45, 0);
+    busGroup.add(busFloor);
 
-    // Bus Hood (Front nose)
-    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 2.0), busYellow);
-    hood.position.set(0, 1.0, -5.2);
+    // 2. Bus Roof (y = 2.9)
+    const busRoof = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.15, 9.2), yellowMat);
+    busRoof.position.set(0, 2.9, 0);
+    busGroup.add(busRoof);
+
+    // 3. Left Wall (solid with windows)
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.4, 9.2), yellowMat);
+    leftWall.position.set(-1.35, 1.65, 0);
+    busGroup.add(leftWall);
+
+    // 4. Right Wall with PASSENGER ENTRANCE OPENING (z: -3.5 to -2.0)
+    const rightWallBack = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.4, 7.0), yellowMat);
+    rightWallBack.position.set(1.35, 1.65, 1.0);
+    busGroup.add(rightWallBack);
+
+    // 5. Front Hood / Engine Block
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 1.8), yellowMat);
+    hood.position.set(0, 0.9, -5.0);
     busGroup.add(hood);
 
-    // Windows
-    const windowStrip = new THREE.Mesh(new THREE.BoxGeometry(3.05, 0.9, 8.5), glassMat);
-    windowStrip.position.set(0, 2.1, 0.2);
-    busGroup.add(windowStrip);
+    // Front Windshield
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.1, 0.1), glassMat);
+    windshield.position.set(0, 2.0, -4.1);
+    busGroup.add(windshield);
 
-    // Black Wheels
-    const wheelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.5, 16);
+    // Wheels
+    const wheelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.45, 16);
     const wheels = [
-      [-1.5, 0.55, -3.2], [1.5, 0.55, -3.2],
-      [-1.5, 0.55, 3.2], [1.5, 0.55, 3.2]
+      [-1.4, 0.55, -3.2], [1.4, 0.55, -3.2],
+      [-1.4, 0.55, 3.2], [1.4, 0.55, 3.2]
     ];
     wheels.forEach(([x, y, z]) => {
-      const w = new THREE.Mesh(wheelGeo, busBlack);
+      const w = new THREE.Mesh(wheelGeo, blackMat);
       w.rotation.z = Math.PI / 2;
       w.position.set(x, y, z);
       busGroup.add(w);
     });
 
     this.scene.add(busGroup);
-    this.addCollider(-6.5, 0, -5.0, 0.5, 3.2, 6.0);
 
-    // 2. WESTWARD MOVING TRUCK WITH OPEN RAMP (Image 4)
+    // Selective colliders that allow walking along aisles
+    this.addCollider(-5.5, 0, -4.5, -4.8, 2.6, 5.0);
+    this.addCollider(-2.0, 0, -1.0, -1.5, 2.6, 5.0);
+  }
+
+  // Walkable Westward Moving Truck with Loading Ramp (Image 4)
+  private buildWalkableTruck() {
     const truckGroup = new THREE.Group();
-    truckGroup.position.set(3.8, 0, -1.0);
+    truckGroup.position.set(4.0, 0, -1.0);
     truckGroup.rotation.y = -0.15;
 
-    const redMat = new THREE.MeshLambertMaterial({ color: 0xb91c1c }); // Red tractor cab
-    const silverMat = new THREE.MeshLambertMaterial({ color: 0xd1d5db }); // Cargo trailer
+    const redCabMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.4, metalness: 0.3 });
+    const silverMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.5, metalness: 0.4 });
+    const woodMat = new THREE.MeshStandardMaterial({ map: this.woodTex, roughness: 0.8 });
 
-    // Trailer Box
-    const trailer = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.6, 11.0), silverMat);
-    trailer.position.set(0, 2.2, 0);
-    trailer.castShadow = true;
-    truckGroup.add(trailer);
+    // 1. Trailer Floor (y = 0.9)
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.25, 10.5), woodMat);
+    floor.position.set(0, 0.9, 0);
+    truckGroup.add(floor);
 
-    // Cab
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.0, 3.2), redMat);
-    cab.position.set(0, 1.8, -6.8);
+    // 2. Trailer Roof (y = 3.8)
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.15, 10.5), silverMat);
+    roof.position.set(0, 3.8, 0);
+    truckGroup.add(roof);
+
+    // 3. Trailer Left Wall (x = -1.45)
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.8, 10.5), silverMat);
+    leftWall.position.set(-1.45, 2.35, 0);
+    truckGroup.add(leftWall);
+
+    // 4. Trailer Right Wall (x = 1.45)
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.8, 10.5), silverMat);
+    rightWall.position.set(1.45, 2.35, 0);
+    truckGroup.add(rightWall);
+
+    // 5. Front Wall behind cab (z = -5.25)
+    const frontWall = new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.8, 0.15), silverMat);
+    frontWall.position.set(0, 2.35, -5.2);
+    truckGroup.add(frontWall);
+
+    // 6. Cab (Solid front)
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.8, 3.0), redCabMat);
+    cab.position.set(0, 1.7, -6.8);
     truckGroup.add(cab);
 
-    // Open Rear Loading Ramp (Players can run up into trailer!)
-    const ramp = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.1, 4.0), silverMat);
-    ramp.position.set(0, 0.5, 7.2);
-    ramp.rotation.x = 0.28; // Incline to ground
+    // 7. OPEN REAR LOADING RAMP (Walkable inclined plane from ground to trailer floor!)
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 3.8), silverMat);
+    ramp.position.set(0, 0.45, 6.8);
+    ramp.rotation.x = 0.24; // Smooth incline
     truckGroup.add(ramp);
 
+    // Cargo boxes inside trailer for cover
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.9 });
+    const crate1 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.2, 1.0), crateMat);
+    crate1.position.set(-0.7, 1.55, -2.0);
+    truckGroup.add(crate1);
+
+    const crate2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 1.2), crateMat);
+    crate2.position.set(0.7, 1.35, 1.0);
+    truckGroup.add(crate2);
+
     this.scene.add(truckGroup);
-    this.addCollider(1.5, 0, -7.5, 6.5, 3.8, 6.0);
+
+    // Walkable Truck Ramp Collider (y: 0.1 to 1.1)
+    this.addRamp(2.6, 5.4, 5.0, 8.5, 0.1, 1.1);
+
+    // Side wall colliders
+    this.addCollider(2.3, 0, -6.0, 2.7, 3.8, 5.2);
+    this.addCollider(5.3, 0, -6.0, 5.7, 3.8, 5.2);
   }
 
-  private buildParkedCars() {
-    // Gray pickup truck in front of House Alpha (Image 3 foreground)
-    const pickupGroup = new THREE.Group();
-    pickupGroup.position.set(-8.5, 0, -12);
-    pickupGroup.rotation.y = 0.6;
-    const grayMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
-    const pickup = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.6, 5.0), grayMat);
-    pickup.position.set(0, 0.9, 0);
-    pickupGroup.add(pickup);
-    this.scene.add(pickupGroup);
-    this.addCollider(-10.5, 0, -15, -6.5, 1.8, -9);
+  private buildParkedVehicles() {
+    const grayMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.4, metalness: 0.5 });
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3, metalness: 0.4 });
 
-    // White sedan car in front of House Bravo (Image 4)
-    const sedanGroup = new THREE.Group();
-    sedanGroup.position.set(8.5, 0, 12);
-    sedanGroup.rotation.y = -0.5;
-    const sedanMat = new THREE.MeshLambertMaterial({ color: 0xf1f5f9 });
-    const sedan = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.4, 4.8), sedanMat);
-    sedan.position.set(0, 0.8, 0);
-    sedanGroup.add(sedan);
-    this.scene.add(sedanGroup);
-    this.addCollider(6.5, 0, 9, 10.5, 1.6, 15);
+    // Pickup truck (Alpha Driveway - Image 3 foreground)
+    const pickup = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.5, 4.8), grayMat);
+    pickup.position.set(-9.5, 0.85, -12);
+    pickup.rotation.y = 0.45;
+    this.scene.add(pickup);
+    this.addCollider(-11.0, 0, -14.5, -7.8, 1.6, -9.5);
+
+    // Vintage sedan (Bravo Driveway - Image 4)
+    const sedan = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.35, 4.6), whiteMat);
+    sedan.position.set(9.5, 0.75, 12);
+    sedan.rotation.y = -0.4;
+    this.scene.add(sedan);
+    this.addCollider(7.8, 0, 9.5, 11.2, 1.5, 14.5);
   }
 
-  // Picket fences bounding yards and map edges
-  private buildFencesAndProps() {
-    const fenceMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
-    const hedgeMat = new THREE.MeshLambertMaterial({ color: 0x2d5a27 });
+  // 1950s Mannequins, Mailboxes, Street Lamps, and Picket Fences
+  private buildDetailedProps() {
+    const picketMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+    const mannequinMat = new THREE.MeshStandardMaterial({ color: 0xf3f4f6, roughness: 0.9 }); // Retro mannequins
 
-    // Outer East / West perimeter fences
-    const fenceWest = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 80), fenceMat);
-    fenceWest.position.set(-18.5, 1.2, 0);
+    // Outer perimeter fences
+    const fenceWest = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.2, 80), picketMat);
+    fenceWest.position.set(-18.5, 1.1, 0);
     this.scene.add(fenceWest);
     this.addCollider(-19, 0, -40, -18, 3, 40);
 
-    const fenceEast = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.4, 80), fenceMat);
-    fenceEast.position.set(18.5, 1.2, 0);
+    const fenceEast = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.2, 80), picketMat);
+    fenceEast.position.set(18.5, 1.1, 0);
     this.scene.add(fenceEast);
     this.addCollider(18, 0, -40, 19, 3, 40);
 
-    // North / South backyard boundaries
-    const fenceNorth = new THREE.Mesh(new THREE.BoxGeometry(37, 2.4, 0.3), fenceMat);
-    fenceNorth.position.set(0, 1.2, -39.5);
+    const fenceNorth = new THREE.Mesh(new THREE.BoxGeometry(37, 2.2, 0.3), picketMat);
+    fenceNorth.position.set(0, 1.1, -39.5);
     this.scene.add(fenceNorth);
     this.addCollider(-19, 0, -40, 19, 3, -39);
 
-    const fenceSouth = new THREE.Mesh(new THREE.BoxGeometry(37, 2.4, 0.3), fenceMat);
-    fenceSouth.position.set(0, 1.2, 39.5);
+    const fenceSouth = new THREE.Mesh(new THREE.BoxGeometry(37, 2.2, 0.3), picketMat);
+    fenceSouth.position.set(0, 1.1, 39.5);
     this.scene.add(fenceSouth);
     this.addCollider(-19, 0, 39, 19, 3, 40);
 
-    // Decorative hedges (Images 3 & 5)
-    const hedge1 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.8, 8.0), hedgeMat);
-    hedge1.position.set(-15, 0.9, -6);
-    this.scene.add(hedge1);
+    // 1950s Nuclear Test Mannequins (Hallmark of Nuketown)
+    const mannequinPositions = [
+      [-2.0, -14.0], [2.0, -14.0], // Alpha Porch
+      [-2.0, 14.0], [2.0, 14.0],   // Bravo Porch
+      [-14.0, 0.0], [14.0, 0.0]    // Sidewalks
+    ];
+    mannequinPositions.forEach(([x, z]) => {
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 1.4, 8), mannequinMat);
+      body.position.set(x, 0.7, z);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12), mannequinMat);
+      head.position.set(x, 1.55, z);
+      this.scene.add(body);
+      this.scene.add(head);
+    });
 
-    const hedge2 = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.8, 8.0), hedgeMat);
-    hedge2.position.set(15, 0.9, 6);
-    this.scene.add(hedge2);
+    // Street Lamps with warm point lights
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.7 });
+    const lampPositions = [[-12.5, -8], [-12.5, 8], [12.5, -8], [12.5, 8]];
+    lampPositions.forEach(([lx, lz]) => {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 5.0, 8), lampMat);
+      pole.position.set(lx, 2.5, lz);
+      this.scene.add(pole);
+
+      const lampHead = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+      lampHead.position.set(lx, 4.9, lz);
+      this.scene.add(lampHead);
+
+      const light = new THREE.PointLight(0xfef08a, 0.8, 14);
+      light.position.set(lx, 4.8, lz);
+      this.scene.add(light);
+    });
   }
 
-  // The Iconic Doomsday Nuclear Clock Tower (Images 3 & 5)
+  // Doomsday Nuclear Clock Tower (Images 3 & 5)
   private buildDoomsdayTower() {
     const towerGroup = new THREE.Group();
-    towerGroup.position.set(-5, 0, -46); // Stands tall behind Alpha backyard
+    towerGroup.position.set(-5, 0, -46);
 
-    const steelMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
-
-    // 4 legs
-    const legGeo = new THREE.CylinderGeometry(0.2, 0.3, 22, 8);
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8, roughness: 0.4 });
     const legOffsets = [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]];
     legOffsets.forEach(([lx, lz]) => {
-      const leg = new THREE.Mesh(legGeo, steelMat);
-      leg.position.set(lx, 11, lz);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 24, 8), steelMat);
+      leg.position.set(lx, 12, lz);
       towerGroup.add(leg);
     });
 
-    // Circular clock face
+    // Clock Face with hour markings
     const clockFace = new THREE.Mesh(
-      new THREE.CylinderGeometry(3.5, 3.5, 0.5, 32),
-      new THREE.MeshLambertMaterial({ color: 0xfef08a })
+      new THREE.CylinderGeometry(3.6, 3.6, 0.5, 32),
+      new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.3 })
     );
     clockFace.rotation.x = Math.PI / 2;
-    clockFace.position.set(0, 20, 0);
+    clockFace.position.set(0, 22, 0);
     towerGroup.add(clockFace);
 
-    // Clock hands
     const hand = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 2.8, 0.2),
-      new THREE.MeshBasicMaterial({ color: 0x111111 })
+      new THREE.BoxGeometry(0.3, 3.0, 0.2),
+      new THREE.MeshBasicMaterial({ color: 0x09090b })
     );
-    hand.position.set(0, 20.8, 0.3);
+    hand.position.set(0, 22.8, 0.35);
     towerGroup.add(hand);
 
     this.scene.add(towerGroup);
   }
 
-  // Visual cues for all 5 Hardpoint zones (translucent glowing zones)
   private buildHardpointVisuals() {
-    NUKETOWN_HARDPOINT_ZONES.forEach((zone, i) => {
+    NUKETOWN_HARDPOINT_ZONES.forEach((zone) => {
       const width = zone.maxX - zone.minX;
       const depth = zone.maxZ - zone.minZ;
 
-      const zoneGeo = new THREE.BoxGeometry(width, 0.1, depth);
+      const zoneGeo = new THREE.BoxGeometry(width, 0.12, depth);
       const zoneMat = new THREE.MeshBasicMaterial({
         color: 0xfacc15,
         transparent: true,
-        opacity: 0.25,
-        wireframe: false
+        opacity: 0.3
       });
 
       const zoneMesh = new THREE.Mesh(zoneGeo, zoneMat);
-      zoneMesh.position.set(zone.centerX, 0.06, zone.centerZ);
+      zoneMesh.position.set(zone.centerX, 0.08, zone.centerZ);
       this.scene.add(zoneMesh);
       this.hardpointMeshes.push(zoneMesh);
 
-      // Yellow border outline
       const edges = new THREE.EdgesGeometry(zoneGeo);
       const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xeab308, linewidth: 2 }));
       zoneMesh.add(line);
     });
 
-    // Animated vertical light beacon for current active zone
     this.activeZoneBeacon = new THREE.Group();
-    const beaconGeo = new THREE.CylinderGeometry(0.3, 1.2, 18, 16);
+    const beaconGeo = new THREE.CylinderGeometry(0.25, 1.2, 22, 16);
     const beaconMat = new THREE.MeshBasicMaterial({
       color: 0xfacc15,
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.38,
       side: THREE.DoubleSide
     });
     const beacon = new THREE.Mesh(beaconGeo, beaconMat);
-    beacon.position.y = 9;
+    beacon.position.y = 11;
     this.activeZoneBeacon.add(beacon);
     this.scene.add(this.activeZoneBeacon);
   }
@@ -425,17 +692,17 @@ export class NuketownMap {
       const mat = mesh.material as THREE.MeshBasicMaterial;
       if (idx === zoneIndex) {
         if (status === 'CONTESTED') {
-          mat.color.setHex(0xef4444); // Red pulse
-          mat.opacity = 0.55;
+          mat.color.setHex(0xef4444);
+          mat.opacity = 0.6;
         } else if (team === 'ALPHA') {
-          mat.color.setHex(0x3b82f6); // Alpha Blue
-          mat.opacity = 0.45;
+          mat.color.setHex(0x3b82f6);
+          mat.opacity = 0.5;
         } else if (team === 'BRAVO') {
-          mat.color.setHex(0xf97316); // Bravo Orange
-          mat.opacity = 0.45;
+          mat.color.setHex(0xf97316);
+          mat.opacity = 0.5;
         } else {
-          mat.color.setHex(0xfacc15); // Neutral Yellow
-          mat.opacity = 0.4;
+          mat.color.setHex(0xfacc15);
+          mat.opacity = 0.45;
         }
       } else {
         mat.color.setHex(0x64748b);

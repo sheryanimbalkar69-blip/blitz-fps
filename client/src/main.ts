@@ -60,21 +60,24 @@ class BlitzGame {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.domElement.id = 'game-canvas';
     document.body.appendChild(this.renderer.domElement);
 
-    // 4. Lighting setup (Sunlight over 1950s Nuketown)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
-    this.scene.add(ambientLight);
+    // 4. Lighting setup (Sunlight & Atmospheric Bounce over 1950s Nuketown)
+    const hemiLight = new THREE.HemisphereLight(0xbfdbfe, 0x3f6212, 0.75);
+    this.scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.2);
-    sunLight.position.set(40, 60, -30);
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.35);
+    sunLight.position.set(45, 65, -35);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
     sunLight.shadow.mapSize.height = 2048;
     sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 150;
-    const shadowDist = 45;
+    sunLight.shadow.camera.far = 160;
+    sunLight.shadow.bias = -0.0002;
+    const shadowDist = 50;
     sunLight.shadow.camera.left = -shadowDist;
     sunLight.shadow.camera.right = shadowDist;
     sunLight.shadow.camera.top = shadowDist;
@@ -231,7 +234,11 @@ class BlitzGame {
 
     if (this.isJoined) {
       // 1. Update Local Player Controller & Check Firing
-      const { didFire, fireOrigin, fireDir } = this.player.update(deltaSec, this.map.colliders);
+      const { didFire, fireOrigin, fireDir } = this.player.update(
+        deltaSec,
+        this.map.colliders,
+        this.map.ramps
+      );
 
       // 2. Send 60Hz Input to Cloudflare Edge Game Server
       const inputPacket = this.player.getInputPacket();
