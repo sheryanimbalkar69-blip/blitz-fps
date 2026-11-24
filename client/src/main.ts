@@ -129,6 +129,10 @@ class BlitzGame {
       onHitmarker: (damage, isKill) => {
         sounds.playHitmarker(isKill);
         this.hud.showHitmarker(isKill);
+        if (isKill) {
+          // Scavenger perk: +30 reserve ammo on every kill
+          this.player.reserveAmmo += 30;
+        }
       },
       onKillfeed: (event) => {
         this.hud.addKillfeedItem(event);
