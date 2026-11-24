@@ -135,7 +135,7 @@ export class GameRoom {
       team,
       isBot: false,
       x: spawnX,
-      y: 1.0,
+      y: 1.65,
       z: spawnZ,
       yaw: isAlpha ? 0 : Math.PI,
       pitch: 0,
@@ -342,6 +342,7 @@ export class GameRoom {
       const isAlpha = victim.team === 'ALPHA';
       victim.z = isAlpha ? -34 - Math.random() * 2 : 34 + Math.random() * 2;
       victim.x = (Math.random() - 0.5) * 8;
+      victim.y = victim.isBot ? 0.0 : 1.65;
       const w = WEAPON_REGISTRY[victim.activeWeapon];
       if (w) {
         victim.ammo = w.magSize;

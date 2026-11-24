@@ -32,10 +32,16 @@ export class PlayerController {
   private lastFireTime: number = 0;
   private footstepTimer: number = 0;
 
-  // Key states
+  // Primary weapon cycle list
+  public primaryWeapons: string[] = ['m4a1', 'kar98k', 'ak47', 'mp5', 'pp19', 'model680'];
+  private currentPrimaryIdx: number = 0;
+
+  // Key & Scope states
   private keys: Record<string, boolean> = {};
   public isMouseDown: boolean = false;
   public isRightMouseDown: boolean = false;
+  public scopeToggled: boolean = false;
+  private rightMouseDownTime: number = 0;
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -62,6 +68,9 @@ export class PlayerController {
   }
 
   private setupInputListeners() {
+    // Prevent browser context menu globally so Right Click is 100% dedicated to weapon scoping
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
 
@@ -77,6 +86,13 @@ export class PlayerController {
         this.switchSlot('TACTICAL');
       } else if (e.code === 'KeyC') {
         this.isCrouched = !this.isCrouched;
+      } else if (e.code === 'KeyQ' || e.code === 'KeyV' || e.code === 'KeyZ') {
+        // Keyboard Scope / ADS toggle
+        this.scopeToggled = !this.scopeToggled;
+        this.isAiming = this.scopeToggled;
+      } else if (e.code === 'KeyB') {
+        // Cycle Primary weapon: M4A1 -> Kar98k Sniper -> AK-47 -> MP5 -> PP19 -> Model 680
+        this.cyclePrimaryWeapon();
       }
     });
 
@@ -85,20 +101,38 @@ export class PlayerController {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (document.pointerLockElement) {
-        if (e.button === 0) this.isMouseDown = true;
-        if (e.button === 2) this.isRightMouseDown = true;
+      if (e.button === 0) {
+        if (document.pointerLockElement) this.isMouseDown = true;
+      } else if (e.button === 2) {
+        e.preventDefault();
+        this.rightMouseDownTime = Date.now();
+        this.isRightMouseDown = true;
+        this.isAiming = true;
       }
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.isMouseDown = false;
-      if (e.button === 2) this.isRightMouseDown = false;
+      if (e.button === 0) {
+        this.isMouseDown = false;
+      } else if (e.button === 2) {
+        e.preventDefault();
+        this.isRightMouseDown = false;
+        const pressDuration = Date.now() - this.rightMouseDownTime;
+        // If quick tap (< 280ms), toggle scope state
+        if (pressDuration < 280) {
+          this.scopeToggled = !this.scopeToggled;
+          this.isAiming = this.scopeToggled;
+        } else {
+          // If held down and released, exit scope
+          this.isAiming = false;
+          this.scopeToggled = false;
+        }
+      }
     });
 
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement) {
-        const factor = this.isAiming ? 0.6 : 1.0;
+        const factor = this.isAiming ? (this.activeWeaponId === 'kar98k' ? 0.35 : 0.55) : 1.0;
         this.yaw -= e.movementX * this.mouseSensitivity * factor;
         this.pitch -= e.movementY * this.mouseSensitivity * factor;
 
@@ -106,6 +140,12 @@ export class PlayerController {
         this.pitch = Math.max(-Math.PI / 2 + 0.02, Math.min(Math.PI / 2 - 0.02, this.pitch));
       }
     });
+  }
+
+  public cyclePrimaryWeapon() {
+    this.currentPrimaryIdx = (this.currentPrimaryIdx + 1) % this.primaryWeapons.length;
+    this.activeSlot = 'PRIMARY';
+    this.setWeapon(this.primaryWeapons[this.currentPrimaryIdx]);
   }
 
   public setWeapon(weaponId: string) {
@@ -147,6 +187,14 @@ export class PlayerController {
     }
   }
 
+  public getTargetFov(): number {
+    if (!this.isAiming) return this.fovNormal;
+    if (this.activeWeaponId === 'kar98k') return 22; // High-magnification sniper optic zoom
+    if (this.activeWeaponId === 'm4a1' || this.activeWeaponId === 'ak47') return 46; // Holographic optic zoom
+    if (this.activeWeaponId === 'mp5' || this.activeWeaponId === 'pp19') return 50; // SMG reflex zoom
+    return 56;
+  }
+
   public update(
     deltaSec: number,
     colliders: CollidableBox[],
@@ -155,9 +203,15 @@ export class PlayerController {
     this.inputSeq++;
 
     // 1. Aim Down Sights (ADS)
-    this.isAiming = this.isRightMouseDown;
-    const targetFov = this.isAiming ? this.fovAds : this.fovNormal;
-    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, deltaSec * 14);
+    this.isAiming = this.isRightMouseDown || this.scopeToggled;
+    if (this.isSprinting) {
+      this.isAiming = false;
+      this.scopeToggled = false;
+    }
+
+    const targetFov = this.getTargetFov();
+    const zoomSpeed = this.activeWeaponId === 'kar98k' ? 22 : 16;
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, deltaSec * zoomSpeed);
     this.camera.updateProjectionMatrix();
 
     // 2. Sprinting & Movement Speeds
@@ -249,8 +303,15 @@ export class PlayerController {
 
     // 4. Viewmodel Animation (Hip-fire vs ADS offset + Bobbing + Recoil)
     const hipPos = new THREE.Vector3(0.24, -0.26, -0.45);
-    const adsPos = new THREE.Vector3(0.0, -0.072, -0.42); // Centers optic red reticle with crosshair // Perfectly centered Holographic sight
+    const adsPos = new THREE.Vector3(0.0, -0.072, -0.42); // Centers optic red reticle with crosshair
     const targetViewmodelPos = this.isAiming ? adsPos : hipPos;
+
+    // Sniper Kar98k hides weapon model when scoped for fullscreen scope view
+    if (this.activeWeaponId === 'kar98k' && this.isAiming) {
+      this.weaponGroup.visible = false;
+    } else {
+      this.weaponGroup.visible = true;
+    }
 
     // Head bobbing effect when walking
     if (moveLen > 0 && this.isGrounded) {

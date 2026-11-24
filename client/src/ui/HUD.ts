@@ -48,6 +48,18 @@ export class GameHUD {
         </svg>
       </div>
 
+      <!-- High-Precision Tactical Sniper Scope Overlay (Kar98k) -->
+      <div id="sniper-scope" class="scope-hidden">
+        <div class="scope-dark-vignette"></div>
+        <div class="scope-reticle-circle">
+          <div class="scope-cross-v"></div>
+          <div class="scope-cross-h"></div>
+          <div class="scope-inner-ring"></div>
+          <div class="scope-mil-marks"></div>
+          <div class="scope-center-point"></div>
+        </div>
+      </div>
+
       <!-- Low Health Screen Vignette -->
       <div id="damage-vignette"></div>
 
@@ -97,6 +109,7 @@ export class GameHUD {
 
       <!-- Bottom-Right Ammo & Weapon Info -->
       <div id="weapon-panel">
+        <div class="hud-key-hints">Right Click / Q: Scope | B: Cycle Gun</div>
         <div id="weapon-name">M4A1 ASSAULT RIFLE</div>
         <div class="ammo-counter">
           <span id="val-ammo">30</span>
@@ -168,6 +181,21 @@ export class GameHUD {
                   <option value="0.75">75% (Balanced)</option>
                   <option value="0.5">50% (Performance Boost)</option>
                 </select>
+              </div>
+            </div>
+            <div class="settings-section">
+              <h3>KEYBOARD & MOUSE CONTROLS</h3>
+              <div class="controls-list" style="font-size: 13px; line-height: 1.6; color: #94a3b8;">
+                <div><strong style="color: #38bdf8;">WASD</strong>: Move</div>
+                <div><strong style="color: #38bdf8;">Left Click</strong>: Fire</div>
+                <div><strong style="color: #38bdf8;">Right Click / Q</strong>: Scope / Aim Down Sights (Tap or Hold)</div>
+                <div><strong style="color: #38bdf8;">B</strong>: Cycle Primary Gun (M4A1, Kar98k Sniper, AK-47, MP5, PP19, Model 680)</div>
+                <div><strong style="color: #38bdf8;">R</strong>: Reload</div>
+                <div><strong style="color: #38bdf8;">Shift</strong>: Sprint</div>
+                <div><strong style="color: #38bdf8;">C / Ctrl</strong>: Crouch</div>
+                <div><strong style="color: #38bdf8;">Space</strong>: Jump</div>
+                <div><strong style="color: #38bdf8;">1 / 2 / 3 / 4</strong>: Weapon Slots (Primary / Pistol / Frag / Flash)</div>
+                <div><strong style="color: #38bdf8;">ESC</strong>: Open Loadout & Settings</div>
               </div>
             </div>
           </div>
@@ -309,7 +337,8 @@ export class GameHUD {
     playerX: number,
     playerZ: number,
     playerYaw: number,
-    otherPlayers: any[]
+    otherPlayers: any[],
+    isAiming: boolean = false
   ) {
     // Health
     const hpVal = document.getElementById('val-hp');
@@ -376,6 +405,33 @@ export class GameHUD {
         pingEl.style.color = '#f1c40f'; // Moderate yellow ping
       } else {
         pingEl.style.color = '#e74c3c'; // High ping
+      }
+    }
+
+    // Crosshair & Scope ADS state
+    const crosshairEl = document.getElementById('crosshair');
+    const scopeEl = document.getElementById('sniper-scope');
+    const isSniper = weaponId === 'kar98k';
+
+    if (crosshairEl) {
+      if (isAiming) {
+        crosshairEl.classList.add('ads-active');
+        if (isSniper) {
+          crosshairEl.style.display = 'none';
+        } else {
+          crosshairEl.style.display = 'block';
+        }
+      } else {
+        crosshairEl.classList.remove('ads-active');
+        crosshairEl.style.display = 'block';
+      }
+    }
+
+    if (scopeEl) {
+      if (isAiming && isSniper) {
+        scopeEl.className = 'scope-visible';
+      } else {
+        scopeEl.className = 'scope-hidden';
       }
     }
 

@@ -218,7 +218,8 @@ export class RemotePlayerManager {
     nametag.position.set(0, 2.05, 0);
     root.add(nametag);
 
-    root.position.set(p.x, p.y, p.z);
+    const feetY = this.getFeetY(p);
+    root.position.set(p.x, feetY, p.z);
     this.scene.add(root);
 
     this.players.set(p.id, {
@@ -229,12 +230,25 @@ export class RemotePlayerManager {
       rightArm: rightArmGroup,
       muzzleFlash: flash,
       nametag,
-      lastPos: new THREE.Vector3(p.x, p.y, p.z),
+      lastPos: new THREE.Vector3(p.x, feetY, p.z),
       animTimer: Math.random() * 10
     });
 
-    this.targetPositions.set(p.id, new THREE.Vector3(p.x, p.y, p.z));
+    this.targetPositions.set(p.id, new THREE.Vector3(p.x, feetY, p.z));
     this.targetRotations.set(p.id, p.yaw);
+  }
+
+  // Accurately compute ground-level feet elevation (prevents floating in air)
+  private getFeetY(p: PlayerNetState): number {
+    if (p.isBot) {
+      // Bots: if y is near 1.0 (legacy waypoint offset), snap to 0.0 ground
+      if (Math.abs(p.y - 1.0) < 0.25) return 0.0;
+      return Math.max(0, p.y || 0.0);
+    } else {
+      // Human players report eye level (~1.65m on ground, ~5.55m on 2nd floor)
+      // Subtract eye height so feet are planted on the floor
+      return Math.max(0, (p.y || 1.65) - 1.65);
+    }
   }
 
   private createNametagSprite(name: string, team: Team, hp: number, maxHp: number): THREE.Sprite {
@@ -268,7 +282,8 @@ export class RemotePlayerManager {
   }
 
   private updatePlayerState(p: PlayerNetState) {
-    this.targetPositions.set(p.id, new THREE.Vector3(p.x, p.y, p.z));
+    const feetY = this.getFeetY(p);
+    this.targetPositions.set(p.id, new THREE.Vector3(p.x, feetY, p.z));
     this.targetRotations.set(p.id, p.yaw);
 
     const soldier = this.players.get(p.id);

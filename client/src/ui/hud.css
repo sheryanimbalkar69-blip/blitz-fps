@@ -53,6 +53,95 @@ body {
 .ch-left { width: 10px; height: 2px; left: -16px; top: -1px; }
 .ch-right { width: 10px; height: 2px; right: -16px; top: -1px; }
 
+/* ADS Scoped State for Non-Sniper Optics (Holographic/Red Dot) */
+.crosshair-center.ads-active .ch-line {
+  display: none !important;
+}
+
+.crosshair-center.ads-active .ch-dot {
+  width: 5px;
+  height: 5px;
+  background: #22c55e;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #22c55e, 0 0 16px rgba(34, 197, 94, 0.8);
+}
+
+/* Authentic CODM High-Precision Sniper Scope (Kar98k) */
+.scope-hidden {
+  display: none !important;
+}
+
+.scope-visible {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scope-dark-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle 38vmin at center, transparent 94%, rgba(0, 0, 0, 0.98) 98%),
+              rgba(0, 0, 0, 0.96);
+}
+
+.scope-reticle-circle {
+  position: relative;
+  width: 76vmin;
+  height: 76vmin;
+  border-radius: 50%;
+  border: 4px solid #1e293b;
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.85), 0 0 0 2000px rgba(0, 0, 0, 0.98);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scope-cross-v {
+  position: absolute;
+  width: 1.5px;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.scope-cross-h {
+  position: absolute;
+  height: 1.5px;
+  width: 100%;
+  background: rgba(15, 23, 42, 0.95);
+}
+
+.scope-inner-ring {
+  position: absolute;
+  width: 20vmin;
+  height: 20vmin;
+  border-radius: 50%;
+  border: 1.5px solid rgba(15, 23, 42, 0.65);
+}
+
+.scope-mil-marks {
+  position: absolute;
+  width: 34vmin;
+  height: 34vmin;
+  border-radius: 50%;
+  border: 1px dashed rgba(15, 23, 42, 0.45);
+}
+
+.scope-center-point {
+  width: 3.5px;
+  height: 3.5px;
+  background: #ef4444;
+  border-radius: 50%;
+  position: absolute;
+  box-shadow: 0 0 6px #ef4444;
+}
+
 /* Hitmarker */
 #hitmarker {
   position: absolute;
@@ -278,6 +367,16 @@ body {
   border-right: 4px solid #facc15;
   text-align: right;
   z-index: 10;
+}
+
+.hud-key-hints {
+  font-size: 11px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: 0.85;
 }
 
 #weapon-name {

@@ -299,7 +299,8 @@ class BlitzGame {
         this.player.pos.x,
         this.player.pos.z,
         this.player.yaw,
-        this.serverPlayers
+        this.serverPlayers,
+        this.player.isAiming
       );
     }
 

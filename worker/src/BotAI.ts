@@ -12,38 +12,38 @@ export interface BotState extends PlayerNetState {
   reactionTimer: number;
 }
 
-// Key tactical waypoints on Nuketown
+// Key tactical waypoints on Nuketown (at ground level y = 0.0)
 export const NUKETOWN_WAYPOINTS = [
   // Team Alpha Spawn & Backyard
-  { id: 'alpha_spawn', x: 0, y: 1.0, z: -35 },
-  { id: 'alpha_patio', x: 0, y: 1.0, z: -32 },
-  { id: 'alpha_back_left', x: -10, y: 1.0, z: -32 },
-  { id: 'alpha_back_right', x: 10, y: 1.0, z: -32 },
+  { id: 'alpha_spawn', x: 0, y: 0.0, z: -35 },
+  { id: 'alpha_patio', x: 0, y: 0.0, z: -32 },
+  { id: 'alpha_back_left', x: -10, y: 0.0, z: -32 },
+  { id: 'alpha_back_right', x: 10, y: 0.0, z: -32 },
   
   // House Alpha (Green)
-  { id: 'alpha_interior', x: -1.0, y: 1.0, z: -24 },
-  { id: 'alpha_garage', x: 6.0, y: 1.0, z: -22 },
-  { id: 'alpha_front_door', x: 0, y: 1.0, z: -16 },
+  { id: 'alpha_interior', x: -1.0, y: 0.0, z: -24 },
+  { id: 'alpha_garage', x: 6.0, y: 0.0, z: -22 },
+  { id: 'alpha_front_door', x: 0, y: 0.0, z: -16 },
   
   // Center Cul-de-Sac
-  { id: 'center_bus_left', x: -5, y: 1.0, z: 0 },
-  { id: 'center_hp', x: 0, y: 1.0, z: 0 },
-  { id: 'center_truck_right', x: 5, y: 1.0, z: 0 },
+  { id: 'center_bus_left', x: -5, y: 0.0, z: 0 },
+  { id: 'center_hp', x: 0, y: 0.0, z: 0 },
+  { id: 'center_truck_right', x: 5, y: 0.0, z: 0 },
   
   // House Bravo (Yellow)
-  { id: 'bravo_front_door', x: 0, y: 1.0, z: 16 },
-  { id: 'bravo_interior', x: 1.0, y: 1.0, z: 24 },
-  { id: 'bravo_garage', x: -6.0, y: 1.0, z: 22 },
+  { id: 'bravo_front_door', x: 0, y: 0.0, z: 16 },
+  { id: 'bravo_interior', x: 1.0, y: 0.0, z: 24 },
+  { id: 'bravo_garage', x: -6.0, y: 0.0, z: 22 },
   
   // Team Bravo Spawn & Backyard
-  { id: 'bravo_patio', x: 0, y: 1.0, z: 32 },
-  { id: 'bravo_spawn', x: 0, y: 1.0, z: 35 },
-  { id: 'bravo_back_left', x: -10, y: 1.0, z: 32 },
-  { id: 'bravo_back_right', x: 10, y: 1.0, z: 32 },
+  { id: 'bravo_patio', x: 0, y: 0.0, z: 32 },
+  { id: 'bravo_spawn', x: 0, y: 0.0, z: 35 },
+  { id: 'bravo_back_left', x: -10, y: 0.0, z: 32 },
+  { id: 'bravo_back_right', x: 10, y: 0.0, z: 32 },
   
   // Side Flanks (West / East)
-  { id: 'west_alley_mid', x: -16, y: 1.0, z: 0 },
-  { id: 'east_street_mid', x: 16, y: 1.0, z: 0 }
+  { id: 'west_alley_mid', x: -16, y: 0.0, z: 0 },
+  { id: 'east_street_mid', x: 16, y: 0.0, z: 0 }
 ];
 
 export class BotController {
@@ -59,7 +59,7 @@ export class BotController {
       team,
       isBot: true,
       x: spawnX,
-      y: 1.0,
+      y: 0.0,
       z: spawnZ,
       yaw: isAlpha ? 0 : Math.PI,
       pitch: 0,
