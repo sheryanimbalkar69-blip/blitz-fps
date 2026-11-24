@@ -1,3 +1,4 @@
+import { WeaponModelFactory } from "./WeaponModels";
 import * as THREE from 'three';
 import { PlayerInputPacket, WEAPON_REGISTRY, WeaponDef } from '../../../shared/packets';
 import { sounds } from './Audio';
@@ -52,108 +53,11 @@ export class PlayerController {
   }
 
   private setupViewmodel() {
-    this.weaponGroup = new THREE.Group();
-    // Hip-fire position: resting comfortably in lower-right corner
-    this.weaponGroup.position.set(0.24, -0.26, -0.52);
-
-    // Dedicated viewmodel fill light attached so the gun is always crisply lit with metallic sheen
-    const vmFillLight = new THREE.PointLight(0xffffff, 0.95, 3.5);
-    vmFillLight.position.set(0.3, 0.2, -0.2);
-    this.camera.add(vmFillLight);
-
-    const gunBodyMat = new THREE.MeshStandardMaterial({
-      color: 0x334155, // Tactical slate-gray
-      roughness: 0.35,
-      metalness: 0.75
-    });
-    const metalMat = new THREE.MeshStandardMaterial({
-      color: 0x475569,
-      roughness: 0.2,
-      metalness: 0.9
-    });
-    const fdeTanMat = new THREE.MeshStandardMaterial({
-      color: 0xa16207, // Magpul FDE Tan accent
-      roughness: 0.7
-    });
-
-    // 1. Upper & Lower Receiver (Receiver only extends forward from z = 0 to z = -0.26)
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.072, 0.24), gunBodyMat);
-    receiver.position.set(0, 0, -0.12);
-    this.weaponGroup.add(receiver);
-
-    // Ejection Port Cover & Brass Deflector
-    const port = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.024, 0.065), metalMat);
-    port.position.set(0.025, 0.015, -0.1);
-    this.weaponGroup.add(port);
-
-    // 2. Picatinny Top Rail
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, 0.34), metalMat);
-    rail.position.set(0, 0.041, -0.16);
-    this.weaponGroup.add(rail);
-
-    // 3. Compact Holographic Sight (Low-profile, sleek housing - leaves whole view clear!)
-    const opticBase = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.014, 0.08), metalMat);
-    opticBase.position.set(0, 0.052, -0.12);
-    this.weaponGroup.add(opticBase);
-
-    // Thin protective hood (only 0.034m high)
-    const hoodMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 });
-    const opticHood = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.034, 0.07), hoodMat);
-    opticHood.position.set(0, 0.072, -0.12);
-    this.weaponGroup.add(opticHood);
-
-    // Clear Anti-Reflective Glass Window
-    const glassLens = new THREE.Mesh(
-      new THREE.BoxGeometry(0.032, 0.026, 0.005),
-      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.25 })
-    );
-    glassLens.position.set(0, 0.072, -0.12);
-    this.weaponGroup.add(glassLens);
-
-    // Glowing Illuminated Red Reticle (Crisp Holographic Dot)
-    const redReticle = new THREE.Mesh(
-      new THREE.SphereGeometry(0.002, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff2222 })
-    );
-    redReticle.position.set(0, 0.072, -0.12);
-    this.weaponGroup.add(redReticle);
-
-    // 4. MLOK Tactical Handguard (extends from z = -0.24 to -0.44)
-    const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.20), gunBodyMat);
-    handguard.position.set(0, 0.006, -0.34);
-    this.weaponGroup.add(handguard);
-
-    // 5. Fluted Steel Barrel (extends to z = -0.56)
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.16, 12), metalMat);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.01, -0.48);
-    this.weaponGroup.add(barrel);
-
-    // Birdcage Flash Hider
-    const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.04, 8), metalMat);
-    muzzle.rotation.x = Math.PI / 2;
-    muzzle.position.set(0, 0.01, -0.58);
-    this.weaponGroup.add(muzzle);
-
-    // 6. Tactical Curved Magazine (tilted forward at z = -0.16)
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.14, 0.065), metalMat);
-    mag.position.set(0, -0.085, -0.15);
-    mag.rotation.x = 0.2;
-    this.weaponGroup.add(mag);
-
-    // 7. Ergonomic Pistol Grip
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.11, 0.048), fdeTanMat);
-    grip.position.set(0, -0.07, -0.02);
-    grip.rotation.x = -0.35;
-    this.weaponGroup.add(grip);
-
-    // 8. Tactical Operator Glove / Forearm (authentic first-person feel)
-    const gloveMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
-    const armRight = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.065, 0.2), gloveMat);
-    armRight.position.set(0.04, -0.11, 0.08);
-    armRight.rotation.x = -0.25;
-    this.weaponGroup.add(armRight);
-
+    if (this.weaponGroup) {
+      this.camera.remove(this.weaponGroup);
+    }
+    this.weaponGroup = WeaponModelFactory.buildWeaponModel(this.activeWeaponId);
+    this.weaponGroup.position.set(0.22, -0.24, -0.5);
     this.camera.add(this.weaponGroup);
   }
 
@@ -211,6 +115,7 @@ export class PlayerController {
       this.ammo = w.magSize;
       this.reserveAmmo = w.reserveAmmo;
       this.isReloading = false;
+      this.setupViewmodel(); // Rebuild high-detail 3D weapon model
     }
   }
 
