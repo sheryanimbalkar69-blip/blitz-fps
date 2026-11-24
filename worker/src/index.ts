@@ -23,9 +23,14 @@ app.get('/api/health', (c) => {
   return c.json({ status: 'ok', server: 'Project Blitz Edge Game Server', timestamp: Date.now() });
 });
 
-// Matchmaking endpoint: returns default room or requested room
+// Matchmaking endpoint: returns default regional room or requested room
 app.get('/api/matchmaking', (c) => {
-  const roomId = c.req.query('roomId') || 'nuketown_room_alpha';
+  const cf = (c.req.raw as any).cf;
+  let defaultRoom = 'nuketown_room_apac';
+  if (cf?.continent === 'NA') defaultRoom = 'nuketown_room_na';
+  else if (cf?.continent === 'EU') defaultRoom = 'nuketown_room_eu';
+
+  const roomId = c.req.query('roomId') || defaultRoom;
   return c.json({
     roomId,
     map: 'Nuketown',
@@ -87,18 +92,26 @@ app.post('/api/player/sync', async (c) => {
   }
 });
 
-// WebSocket Game Room routing
+// WebSocket Game Room routing with Low-Latency Regional Edge Location Hints
 app.all('/ws/room/:roomId', async (c) => {
-  const roomId = c.req.param('roomId') || 'default_room';
+  const roomId = c.req.param('roomId') || 'nuketown_room_apac';
   const id = c.env.GAME_ROOM.idFromName(roomId);
-  const obj = c.env.GAME_ROOM.get(id);
+
+  // Detect player origin to place Durable Object close to player
+  const cf = (c.req.raw as any).cf;
+  let hint = 'apac-se'; // Default to Southeast Asia / India edge hub
+  if (cf?.continent === 'NA') hint = 'enam';
+  else if (cf?.continent === 'EU') hint = 'weur';
+  else if (cf?.country === 'JP' || cf?.country === 'KR') hint = 'apac-ne';
+
+  const obj = c.env.GAME_ROOM.get(id, { locationHint: hint });
   return obj.fetch(c.req.raw);
 });
 
 // WebSocket Global World Chat routing
 app.all('/ws/chat', async (c) => {
   const id = c.env.GLOBAL_CHAT.idFromName('global_chat_main');
-  const obj = c.env.GLOBAL_CHAT.get(id);
+  const obj = c.env.GLOBAL_CHAT.get(id, { locationHint: 'apac-se' });
   return obj.fetch(c.req.raw);
 });
 

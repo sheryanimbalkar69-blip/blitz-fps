@@ -23,6 +23,7 @@ class BlitzGame {
   private lastFpsUpdate: number = performance.now();
   private currentFps: number = 60;
   private isJoined: boolean = false;
+  private lastNetworkTick: number = 0;
 
   // Authoritative State Buffers
   private latestMatchState: MatchState = {
@@ -202,8 +203,8 @@ class BlitzGame {
       // Lock mouse cursor
       document.body.requestPointerLock();
 
-      // Connect to Cloudflare Durable Object Room
-      this.net.connect(username, 'nuketown_room_alpha');
+      // Connect to Cloudflare Low-Latency Regional Edge Room
+      this.net.connect(username, 'nuketown_room_apac');
     });
 
     // Re-lock pointer on canvas click
@@ -237,18 +238,21 @@ class BlitzGame {
     }
 
     if (this.isJoined) {
-      // 1. Update Local Player Controller & Check Firing
+      // 1. Update Local Player Controller & Check Firing (Runs at full refresh rate for 0ms input lag)
       const { didFire, fireOrigin, fireDir } = this.player.update(
         deltaSec,
         this.map.colliders,
         this.map.ramps
       );
 
-      // 2. Send 60Hz Input to Cloudflare Edge Game Server
-      const inputPacket = this.player.getInputPacket();
-      this.net.sendInput(inputPacket);
+      // 2. Throttle network input packets to 25Hz - prevents TCP bufferbloat & drops ping
+      if (currentTime - this.lastNetworkTick >= 40) {
+        this.lastNetworkTick = currentTime;
+        const inputPacket = this.player.getInputPacket();
+        this.net.sendInput(inputPacket);
+      }
 
-      // 3. Send Raycast Fire Packet if Shot
+      // 3. Send Raycast Fire Packet if Shot (instantaneous dispatch)
       if (didFire && fireOrigin && fireDir) {
         this.net.sendFire(fireOrigin, fireDir, this.player.activeWeaponId);
       }

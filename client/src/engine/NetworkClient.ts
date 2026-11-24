@@ -31,12 +31,11 @@ export class NetworkClient {
     this.callbacks = callbacks;
   }
 
-  public connect(username: string, roomId: string = 'nuketown_room_alpha') {
-    // Live Cloudflare Worker URL or local fallback
+  public connect(username: string, roomId: string = 'nuketown_room_apac') {
+    // Live Cloudflare Worker URL
     const workerDomain = 'blitz-fps-worker.sheryanimbalkar-e2ee.workers.dev';
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     
-    // Cloudflare edge worker hosts the Durable Object WebSockets
+    // Cloudflare edge worker hosts the Durable Object WebSockets in regional hub
     const wsBase = `wss://${workerDomain}`;
     const gameUrl = `${wsBase}/ws/room/${roomId}?username=${encodeURIComponent(username)}`;
     const chatUrl = `${wsBase}/ws/chat`;
@@ -82,7 +81,8 @@ export class NetworkClient {
           this.callbacks.onChatMessage(msg.sender, msg.text, false);
         } else if (msg.type === 'PONG') {
           const rtt = Date.now() - msg.clientTime;
-          this.currentPing = Math.max(8, rtt);
+          // Smooth real-time network latency calculation
+          this.currentPing = this.currentPing > 0 ? (this.currentPing * 0.65 + rtt * 0.35) : rtt;
           this.callbacks.onPingUpdate(this.currentPing);
         }
       } catch (e) {
