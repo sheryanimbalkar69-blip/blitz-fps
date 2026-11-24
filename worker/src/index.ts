@@ -26,9 +26,9 @@ app.get('/api/health', (c) => {
 // Matchmaking endpoint: returns default regional room or requested room
 app.get('/api/matchmaking', (c) => {
   const cf = (c.req.raw as any).cf;
-  let defaultRoom = 'nuketown_room_apac';
-  if (cf?.continent === 'NA') defaultRoom = 'nuketown_room_na';
-  else if (cf?.continent === 'EU') defaultRoom = 'nuketown_room_eu';
+  let defaultRoom = 'nuketown_apac_v1';
+  if (cf?.continent === 'NA') defaultRoom = 'nuketown_na_v1';
+  else if (cf?.continent === 'EU') defaultRoom = 'nuketown_eu_v1';
 
   const roomId = c.req.query('roomId') || defaultRoom;
   return c.json({
@@ -94,7 +94,7 @@ app.post('/api/player/sync', async (c) => {
 
 // WebSocket Game Room routing with Low-Latency Regional Edge Location Hints
 app.all('/ws/room/:roomId', async (c) => {
-  const roomId = c.req.param('roomId') || 'nuketown_room_apac';
+  const roomId = c.req.param('roomId') || 'nuketown_apac_v1';
   const id = c.env.GAME_ROOM.idFromName(roomId);
 
   // Detect player origin to place Durable Object close to player

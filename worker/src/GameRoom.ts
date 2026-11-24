@@ -251,7 +251,6 @@ export class GameRoom {
     const weapon = WEAPON_REGISTRY[shooter.activeWeapon] || WEAPON_REGISTRY['m4a1'];
     shooter.ammo--;
 
-    // Raycast hitscan test against enemy players & bots
     const origin = { x: data.originX || shooter.x, y: (data.originY || shooter.y) + 1.5, z: data.originZ || shooter.z };
     const dir = { x: data.dirX, y: data.dirY, z: data.dirZ };
 
@@ -260,24 +259,35 @@ export class GameRoom {
       ...Array.from(this.bots.values())
     ].filter(p => p.id !== shooter.id && p.team !== shooter.team && !p.isDead);
 
+    // 1. Client-Assisted Lag Compensation: If client raycast landed on an entity
+    if (data.clientHitId) {
+      const hitTarget = targets.find(t => t.id === data.clientHitId);
+      if (hitTarget) {
+        const dist = Math.hypot(hitTarget.x - origin.x, hitTarget.z - origin.z);
+        // Generous lag compensation rewind tolerance (up to 3.5m rewind window)
+        if (dist <= weapon.range + 5.0) {
+          this.applyDamage(hitTarget, weapon.damage, shooter);
+          return;
+        }
+      }
+    }
+
+    // 2. Authoritative Server Raycast fallback
     for (const target of targets) {
-      // Bounding capsule/cylinder hit check
       const dx = target.x - origin.x;
       const dz = target.z - origin.z;
       const dist = Math.hypot(dx, dz);
 
       if (dist <= weapon.range) {
-        // Dot product to check if shot is pointing toward target
         const normX = dx / dist;
         const normZ = dz / dist;
         const dot = dir.x * normX + dir.z * normZ;
 
-        // Angle tolerance based on target radius (0.5m) and distance
-        const angleThreshold = Math.max(0.96, 1.0 - (0.6 / Math.max(dist, 1)));
+        // Lag-friendly angle tolerance
+        const angleThreshold = Math.max(0.92, 1.0 - (1.2 / Math.max(dist, 1)));
         if (dot >= angleThreshold) {
-          // Hit confirmed!
           this.applyDamage(target, weapon.damage, shooter);
-          break; // Stop at first hit entity
+          break;
         }
       }
     }
@@ -404,14 +414,38 @@ export class GameRoom {
     // 3. Hardpoint Mechanics & Scoring
     this.updateHardpoint(allEntities, now, deltaSec);
 
-    // 4. Broadcast 20Hz Snapshot to Clients
+    // 4. Broadcast 20Hz Compact Snapshot to Clients (Rounds numbers to eliminate JSON bloat & bufferbloat)
+    const compactPlayers = allEntities.map(p => ({
+      id: p.id,
+      name: p.name,
+      team: p.team,
+      isBot: p.isBot,
+      x: Math.round(p.x * 100) / 100,
+      y: Math.round(p.y * 100) / 100,
+      z: Math.round(p.z * 100) / 100,
+      yaw: Math.round(p.yaw * 100) / 100,
+      pitch: Math.round(p.pitch * 100) / 100,
+      hp: Math.round(p.hp),
+      maxHp: p.maxHp,
+      isDead: p.isDead,
+      activeWeapon: p.activeWeapon,
+      ammo: p.ammo,
+      reserveAmmo: p.reserveAmmo,
+      isReloading: p.isReloading,
+      isFiring: p.isFiring,
+      kills: p.kills,
+      deaths: p.deaths,
+      score: p.score,
+      hardpointSecs: p.hardpointSecs
+    }));
+
     const snapshot: WorldSnapshotPacket = {
       type: 'SNAPSHOT',
       serverTick: this.serverTick,
       timestamp: now,
       match: this.matchState,
       hardpoint: this.hardpointState,
-      players: allEntities
+      players: compactPlayers
     };
 
     this.broadcast(snapshot);

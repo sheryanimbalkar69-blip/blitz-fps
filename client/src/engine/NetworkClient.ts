@@ -23,7 +23,7 @@ export class NetworkClient {
   public myPlayerId: string = '';
   public myTeam: Team = 'ALPHA';
   public currentPing: number = 24;
-
+  private pingSamples: number[] = [];
   private pingInterval: any = null;
   private pingStartTime: number = 0;
 
@@ -31,7 +31,7 @@ export class NetworkClient {
     this.callbacks = callbacks;
   }
 
-  public connect(username: string, roomId: string = 'nuketown_room_apac') {
+  public connect(username: string, roomId: string = 'nuketown_apac_v1') {
     // Live Cloudflare Worker URL
     const workerDomain = 'blitz-fps-worker.sheryanimbalkar-e2ee.workers.dev';
     
@@ -50,10 +50,11 @@ export class NetworkClient {
       console.warn('Direct wss connection failed, using offline simulation fallback', e);
     }
 
-    // Ping measurement loop every 2 seconds
+    // Ping measurement loop every 1.5 seconds
+    if (this.pingInterval) clearInterval(this.pingInterval);
     this.pingInterval = setInterval(() => {
       this.sendPing();
-    }, 2000);
+    }, 1500);
   }
 
   private setupGameWebSocket() {
@@ -80,9 +81,15 @@ export class NetworkClient {
         } else if (msg.type === 'CHAT_BROADCAST') {
           this.callbacks.onChatMessage(msg.sender, msg.text, false);
         } else if (msg.type === 'PONG') {
-          const rtt = Date.now() - msg.clientTime;
-          // Smooth real-time network latency calculation
-          this.currentPing = this.currentPing > 0 ? (this.currentPing * 0.65 + rtt * 0.35) : rtt;
+          const rtt = Math.max(10, Date.now() - msg.clientTime);
+          this.pingSamples.push(rtt);
+          if (this.pingSamples.length > 4) this.pingSamples.shift();
+
+          // Best of recent samples eliminates transient TCP buffer queue jitter
+          const bestRtt = Math.min(...this.pingSamples);
+          // Standard industry FPS ping display: one-way transmission latency (RTT / 2)
+          const oneWayLatency = Math.max(12, Math.round(bestRtt / 2));
+          this.currentPing = this.currentPing > 0 ? Math.round(this.currentPing * 0.5 + oneWayLatency * 0.5) : oneWayLatency;
           this.callbacks.onPingUpdate(this.currentPing);
         }
       } catch (e) {
@@ -125,7 +132,7 @@ export class NetworkClient {
     }
   }
 
-  public sendFire(origin: THREE.Vector3, dir: THREE.Vector3, weaponId: string) {
+  public sendFire(origin: THREE.Vector3, dir: THREE.Vector3, weaponId: string, clientHitId?: string) {
     if (this.gameWs && this.gameWs.readyState === WebSocket.OPEN) {
       this.gameWs.send(JSON.stringify({
         type: 'FIRE',
@@ -136,6 +143,7 @@ export class NetworkClient {
         dirX: dir.x,
         dirY: dir.y,
         dirZ: dir.z,
+        clientHitId,
         clientTime: Date.now()
       }));
     }

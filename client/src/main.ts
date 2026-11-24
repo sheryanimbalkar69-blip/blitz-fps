@@ -204,7 +204,7 @@ class BlitzGame {
       document.body.requestPointerLock();
 
       // Connect to Cloudflare Low-Latency Regional Edge Room
-      this.net.connect(username, 'nuketown_room_apac');
+      this.net.connect(username, 'nuketown_apac_v1');
     });
 
     // Re-lock pointer on canvas click
@@ -252,9 +252,35 @@ class BlitzGame {
         this.net.sendInput(inputPacket);
       }
 
-      // 3. Send Raycast Fire Packet if Shot (instantaneous dispatch)
+      // 3. Send Raycast Fire Packet if Shot with Client-Assisted Hit Registration
       if (didFire && fireOrigin && fireDir) {
-        this.net.sendFire(fireOrigin, fireDir, this.player.activeWeaponId);
+        let hitTargetId: string | undefined;
+        const myTeam = this.net.myTeam;
+        let closestDist = 999;
+
+        for (const p of this.serverPlayers) {
+          if (p.id === this.net.myPlayerId || p.team === myTeam || p.isDead) continue;
+          const dx = p.x - fireOrigin.x;
+          const dz = p.z - fireOrigin.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist < closestDist) {
+            const normX = dx / dist;
+            const normZ = dz / dist;
+            const dot = fireDir.x * normX + fireDir.z * normZ;
+            if (dot >= 0.94) {
+              closestDist = dist;
+              hitTargetId = p.id;
+            }
+          }
+        }
+
+        // Immediate 0ms Client-Side Predictive Feedback
+        if (hitTargetId) {
+          sounds.playHitmarker(false);
+          this.hud.showHitmarker(false);
+        }
+
+        this.net.sendFire(fireOrigin, fireDir, this.player.activeWeaponId, hitTargetId);
       }
 
       // 4. Update Remote Players (Smooth Lerp)

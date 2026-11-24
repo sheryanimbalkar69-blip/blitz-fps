@@ -367,7 +367,17 @@ export class GameHUD {
     const fpsEl = document.getElementById('val-fps');
     const pingEl = document.getElementById('val-ping');
     if (fpsEl) fpsEl.textContent = String(Math.round(fps));
-    if (pingEl) pingEl.textContent = String(Math.round(ping));
+    if (pingEl) {
+      const p = Math.round(ping);
+      pingEl.textContent = String(p);
+      if (p <= 65) {
+        pingEl.style.color = '#2ecc71'; // Low green ping
+      } else if (p <= 110) {
+        pingEl.style.color = '#f1c40f'; // Moderate yellow ping
+      } else {
+        pingEl.style.color = '#e74c3c'; // High ping
+      }
+    }
 
     // Minimap Radar
     this.renderMinimap(playerX, playerZ, playerYaw, otherPlayers, hpState.zoneIndex);
