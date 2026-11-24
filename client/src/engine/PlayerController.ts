@@ -8,7 +8,7 @@ export class PlayerController {
   public inputSeq: number = 0;
   public pos: THREE.Vector3 = new THREE.Vector3(0, 1.6, -34);
   public vel: THREE.Vector3 = new THREE.Vector3();
-  public yaw: number = 0;
+  public yaw: number = Math.PI;
   public pitch: number = 0;
   public isGrounded: boolean = true;
   public isCrouched: boolean = false;
@@ -91,6 +91,12 @@ export class PlayerController {
     const sights = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.15), metalMat);
     sights.position.set(0, 0.06, 0.0);
     this.weaponGroup.add(sights);
+
+    // Green Tritium Iron Sight Dot
+    const tritiumMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+    const frontDot = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.008, 0.006), tritiumMat);
+    frontDot.position.set(0, 0.075, -0.44);
+    this.weaponGroup.add(frontDot);
 
     this.camera.add(this.weaponGroup);
   }
@@ -188,30 +194,30 @@ export class PlayerController {
     this.isSprinting = !!(this.keys['ShiftLeft'] || this.keys['ShiftRight']) && !!this.keys['KeyW'] && !this.isAiming && !this.isCrouched;
     const moveSpeed = this.isSprinting ? 6.4 : (this.isCrouched ? 2.4 : (this.isAiming ? 3.0 : 4.6));
 
-    let moveX = 0;
-    let moveZ = 0;
+    // Update Camera rotation first so world direction is always accurate
+    this.camera.rotation.order = 'YXZ';
+    this.camera.rotation.y = this.yaw;
+    this.camera.rotation.x = this.pitch;
 
-    if (this.keys['KeyW']) {
-      moveX += Math.sin(this.yaw);
-      moveZ += Math.cos(this.yaw);
-    }
-    if (this.keys['KeyS']) {
-      moveX -= Math.sin(this.yaw);
-      moveZ -= Math.cos(this.yaw);
-    }
-    if (this.keys['KeyA']) {
-      moveX += Math.sin(this.yaw + Math.PI / 2);
-      moveZ += Math.cos(this.yaw + Math.PI / 2);
-    }
-    if (this.keys['KeyD']) {
-      moveX += Math.sin(this.yaw - Math.PI / 2);
-      moveZ += Math.cos(this.yaw - Math.PI / 2);
-    }
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
 
-    const moveLen = Math.hypot(moveX, moveZ);
+    const right = new THREE.Vector3();
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    const moveVec = new THREE.Vector3();
+    if (this.keys['KeyW']) moveVec.add(forward);
+    if (this.keys['KeyS']) moveVec.sub(forward);
+    if (this.keys['KeyD']) moveVec.add(right);
+    if (this.keys['KeyA']) moveVec.sub(right);
+
+    const moveLen = moveVec.length();
     if (moveLen > 0) {
-      const stepX = (moveX / moveLen) * moveSpeed * deltaSec;
-      const stepZ = (moveZ / moveLen) * moveSpeed * deltaSec;
+      moveVec.normalize();
+      const stepX = moveVec.x * moveSpeed * deltaSec;
+      const stepZ = moveVec.z * moveSpeed * deltaSec;
 
       // Predict movement with collision detection
       this.tryMoveWithCollision(stepX, stepZ, colliders);

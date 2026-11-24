@@ -52,6 +52,7 @@ class BlitzGame {
 
     // 2. Camera setup
     this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 300);
+    this.scene.add(this.camera); // Essential for camera-attached viewmodel gun rendering
 
     // 3. Renderer setup
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -92,10 +93,10 @@ class BlitzGame {
         console.log(`Assigned Player ID: ${playerId}, Team: ${team}`);
         if (team === 'BRAVO') {
           this.player.pos.set(0, 1.6, 34);
-          this.player.yaw = Math.PI;
+          this.player.yaw = 0; // Look toward center (-Z)
         } else {
           this.player.pos.set(0, 1.6, -34);
-          this.player.yaw = 0;
+          this.player.yaw = Math.PI; // Look toward center (+Z)
         }
       },
       onSnapshot: (snapshot: WorldSnapshotPacket) => {
