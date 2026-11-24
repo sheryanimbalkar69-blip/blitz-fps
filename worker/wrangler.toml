@@ -1,0 +1,33 @@
+name = "blitz-fps-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+[durable_objects]
+bindings = [
+  { name = "GAME_ROOM", class_name = "GameRoom" },
+  { name = "GLOBAL_CHAT", class_name = "GlobalChat" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom", "GlobalChat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "blitz_game_db"
+database_id = "537e2e95-390b-4a16-b423-2b310a67d4e9"
+
+[env.staging]
+name = "blitz-fps-worker-staging"
+[env.staging.durable_objects]
+bindings = [
+  { name = "GAME_ROOM", class_name = "GameRoom" },
+  { name = "GLOBAL_CHAT", class_name = "GlobalChat" }
+]
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom", "GlobalChat"]
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "blitz_game_db"
+database_id = "537e2e95-390b-4a16-b423-2b310a67d4e9"
