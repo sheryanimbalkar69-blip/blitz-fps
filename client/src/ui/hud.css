@@ -87,8 +87,7 @@ body {
 .scope-dark-vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle 38vmin at center, transparent 94%, rgba(0, 0, 0, 0.98) 98%),
-              rgba(0, 0, 0, 0.96);
+  background: radial-gradient(circle 38vmin at center, transparent 88%, rgba(0, 0, 0, 0.55) 97%, rgba(0, 0, 0, 0.98) 100%);
 }
 
 .scope-reticle-circle {
@@ -97,7 +96,7 @@ body {
   height: 76vmin;
   border-radius: 50%;
   border: 4px solid #1e293b;
-  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.85), 0 0 0 2000px rgba(0, 0, 0, 0.98);
+  box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.45), 0 0 0 2000px rgba(0, 0, 0, 0.98);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -629,4 +628,198 @@ body {
   font-size: 12px;
   color: #64748b;
   line-height: 1.5;
+}
+
+/* Reloading Progress Bar */
+#reload-indicator {
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 15;
+}
+
+#reload-indicator.hidden { display: none; }
+
+.reload-text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #facc15;
+  text-shadow: 0 1px 4px #000;
+  margin-bottom: 4px;
+}
+
+.reload-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#reload-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: #facc15;
+  transition: width 0.05s linear;
+}
+
+/* Killstreak / Multi-kill Banner */
+#killstreak-banner {
+  position: absolute;
+  top: 19%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 26px;
+  background: linear-gradient(90deg, transparent, rgba(234, 179, 8, 0.9), transparent);
+  color: #0b0f19;
+  font-family: 'Teko', sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  pointer-events: none;
+  z-index: 22;
+  transition: opacity 0.25s;
+}
+
+#killstreak-banner.hidden { opacity: 0; }
+
+/* Flashbang Whiteout */
+#flash-overlay {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+  transition: opacity 0.15s ease-out;
+}
+
+/* Death / Respawn Overlay */
+#death-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(127, 29, 29, 0.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  pointer-events: none;
+}
+
+#death-overlay.hidden { display: none; }
+
+.death-title {
+  font-family: 'Teko', sans-serif;
+  font-size: 64px;
+  letter-spacing: 4px;
+  color: #ef4444;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+}
+
+.death-sub {
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: #f8fafc;
+  text-transform: uppercase;
+}
+
+/* Tab 5v5 Scoreboard Modal */
+#tab-scoreboard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 720px;
+  max-width: 92vw;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 18px 22px;
+  z-index: 45;
+  pointer-events: none;
+}
+
+#tab-scoreboard.hidden { display: none; }
+
+.sb-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  font-family: 'Teko', sans-serif;
+  font-size: 26px;
+  letter-spacing: 1.5px;
+}
+
+.sb-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.sb-team-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  margin-bottom: 6px;
+}
+
+.sb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sb-table th {
+  text-align: left;
+  color: #94a3b8;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sb-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.sb-me {
+  background: rgba(56, 189, 248, 0.18);
+  font-weight: 700;
+}
+
+/* Match End Victory/Defeat Banner */
+#match-end-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 15, 25, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  pointer-events: none;
+}
+
+#match-end-overlay.hidden { display: none; }
+
+.match-end-title {
+  font-family: 'Teko', sans-serif;
+  font-size: 76px;
+  letter-spacing: 6px;
+}
+
+.match-end-sub {
+  font-size: 18px;
+  color: #cbd5e1;
+  letter-spacing: 2px;
 }

@@ -14,6 +14,8 @@ export interface NetworkCallbacks {
   onKillfeed: (event: KillfeedEvent) => void;
   onChatMessage: (sender: string, text: string, isWorld: boolean) => void;
   onPingUpdate: (pingMs: number) => void;
+  onExplosion?: (x: number, y: number, z: number, isFlash: boolean) => void;
+  onFlashed?: () => void;
 }
 
 export class NetworkClient {
@@ -80,6 +82,10 @@ export class NetworkClient {
           this.callbacks.onKillfeed(msg.event);
         } else if (msg.type === 'CHAT_BROADCAST') {
           this.callbacks.onChatMessage(msg.sender, msg.text, false);
+        } else if (msg.type === 'EXPLOSION') {
+          this.callbacks.onExplosion?.(msg.x, msg.y, msg.z, !!msg.isFlash);
+        } else if (msg.type === 'FLASHED') {
+          this.callbacks.onFlashed?.();
         } else if (msg.type === 'PONG') {
           const rtt = Math.max(10, Date.now() - msg.clientTime);
           this.pingSamples.push(rtt);

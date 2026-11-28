@@ -36,6 +36,12 @@ export class PlayerController {
   public primaryWeapons: string[] = ['m4a1', 'kar98k', 'ak47', 'mp5', 'pp19', 'model680'];
   private currentPrimaryIdx: number = 0;
 
+  // Callbacks & Reload/Death state
+  public onWeaponChange?: (weaponId: string) => void;
+  public isDead: boolean = false;
+  private reloadStartTime: number = 0;
+  private reloadDurationMs: number = 2000;
+
   // Key & Scope states
   private keys: Record<string, boolean> = {};
   public isMouseDown: boolean = false;
@@ -148,30 +154,44 @@ export class PlayerController {
     this.setWeapon(this.primaryWeapons[this.currentPrimaryIdx]);
   }
 
-  public setWeapon(weaponId: string) {
+  public setWeapon(weaponId: string, notifyServer: boolean = true) {
     const w = WEAPON_REGISTRY[weaponId];
     if (w) {
       this.activeWeaponId = weaponId;
       this.ammo = w.magSize;
       this.reserveAmmo = w.reserveAmmo;
       this.isReloading = false;
+      this.isAiming = false;
+      this.scopeToggled = false;
       this.setupViewmodel(); // Rebuild high-detail 3D weapon model
+      if (notifyServer && this.onWeaponChange) {
+        this.onWeaponChange(weaponId);
+      }
     }
   }
 
   public switchSlot(slot: 'PRIMARY' | 'SECONDARY' | 'LETHAL' | 'TACTICAL') {
     this.activeSlot = slot;
-    if (slot === 'PRIMARY') this.setWeapon('m4a1');
+    if (slot === 'PRIMARY') this.setWeapon(this.primaryWeapons[this.currentPrimaryIdx]);
     else if (slot === 'SECONDARY') this.setWeapon('pistol1911');
     else if (slot === 'LETHAL') this.setWeapon('frag');
     else if (slot === 'TACTICAL') this.setWeapon('flashbang');
   }
 
+  public getReloadProgress(): number {
+    if (!this.isReloading) return 0;
+    return Math.min(1, (Date.now() - this.reloadStartTime) / this.reloadDurationMs);
+  }
+
   public reload() {
     const w = WEAPON_REGISTRY[this.activeWeaponId];
-    if (w && !this.isReloading) {
+    if (w && !this.isReloading && !this.isDead) {
       if (this.ammo < w.magSize && this.reserveAmmo > 0) {
         this.isReloading = true;
+        this.isAiming = false;
+        this.scopeToggled = false;
+        this.reloadStartTime = Date.now();
+        this.reloadDurationMs = Math.max(500, w.reloadTime * 1000);
         sounds.playReload();
         setTimeout(() => {
           const needed = w.magSize - this.ammo;
@@ -179,7 +199,7 @@ export class PlayerController {
           this.ammo += add;
           this.reserveAmmo -= add;
           this.isReloading = false;
-        }, w.reloadTime * 1000);
+        }, this.reloadDurationMs);
       } else if (this.ammo === w.magSize) {
         // Weapon already full, play subtle inspection click
         sounds.playReload();
@@ -301,28 +321,40 @@ export class PlayerController {
     this.camera.rotation.y = this.yaw;
     this.camera.rotation.x = this.pitch;
 
-    // 4. Viewmodel Animation (Hip-fire vs ADS offset + Bobbing + Recoil)
+    // 4. Viewmodel Animation (Hip-fire vs ADS offset + Bobbing + Reload Dip + Recoil)
     const hipPos = new THREE.Vector3(0.24, -0.26, -0.45);
     const adsPos = new THREE.Vector3(0.0, -0.072, -0.42); // Centers optic red reticle with crosshair
-    const targetViewmodelPos = this.isAiming ? adsPos : hipPos;
+    const targetViewmodelPos = this.isAiming ? adsPos.clone() : hipPos.clone();
 
-    // Sniper Kar98k hides weapon model when scoped for fullscreen scope view
-    if (this.activeWeaponId === 'kar98k' && this.isAiming) {
+    if (this.isDead) {
+      this.isAiming = false;
+      this.scopeToggled = false;
+      this.weaponGroup.visible = false;
+    } else if (this.activeWeaponId === 'kar98k' && this.isAiming) {
       this.weaponGroup.visible = false;
     } else {
       this.weaponGroup.visible = true;
     }
 
+    // Reload dip & tilt animation
+    let targetRotX = this.recoilRot.x;
+    if (this.isReloading) {
+      const p = this.getReloadProgress();
+      const dip = Math.sin(p * Math.PI);
+      targetViewmodelPos.y -= dip * 0.16;
+      targetRotX -= dip * 0.65;
+    }
+
     // Head bobbing effect when walking
-    if (moveLen > 0 && this.isGrounded) {
+    if (moveLen > 0 && this.isGrounded && !this.isDead) {
       const bobFreq = this.isSprinting ? 14 : 9;
       const bobAmp = this.isSprinting ? 0.015 : 0.008;
       targetViewmodelPos.y += Math.sin(Date.now() * 0.001 * bobFreq) * bobAmp;
       targetViewmodelPos.x += Math.cos(Date.now() * 0.001 * (bobFreq / 2)) * (bobAmp * 0.8);
     }
 
-    this.weaponGroup.position.lerp(targetViewmodelPos.clone().add(this.recoilOffset), deltaSec * 20);
-    this.weaponGroup.rotation.x = THREE.MathUtils.lerp(this.weaponGroup.rotation.x, this.recoilRot.x, deltaSec * 25);
+    this.weaponGroup.position.lerp(targetViewmodelPos.add(this.recoilOffset), deltaSec * 20);
+    this.weaponGroup.rotation.x = THREE.MathUtils.lerp(this.weaponGroup.rotation.x, targetRotX, deltaSec * 18);
     this.recoilOffset.lerp(new THREE.Vector3(0, 0, 0), deltaSec * 15);
     this.recoilRot.x = THREE.MathUtils.lerp(this.recoilRot.x, 0, deltaSec * 20);
 
@@ -338,7 +370,7 @@ export class PlayerController {
     const now = Date.now();
     const fireIntervalMs = (60 / w.fireRate) * 1000;
 
-    if (this.isMouseDown && !this.isReloading && (now - this.lastFireTime >= fireIntervalMs)) {
+    if (!this.isDead && this.isMouseDown && !this.isReloading && (now - this.lastFireTime >= fireIntervalMs)) {
       if (this.ammo > 0) {
         this.ammo--;
         this.lastFireTime = now;

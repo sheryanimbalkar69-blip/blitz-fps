@@ -5,6 +5,7 @@ import { PlayerController } from './engine/PlayerController';
 import { RemotePlayerManager } from './engine/RemotePlayer';
 import { GameHUD } from './ui/HUD';
 import { NetworkClient } from './engine/NetworkClient';
+import { EffectsManager } from './engine/Effects';
 import { sounds } from './engine/Audio';
 import { WorldSnapshotPacket, MatchState, HardpointState } from '../../shared/packets';
 
@@ -15,6 +16,7 @@ class BlitzGame {
   private map: NuketownMap;
   private player: PlayerController;
   private remotePlayers: RemotePlayerManager;
+  private effects: EffectsManager;
   private hud: GameHUD;
   private net: NetworkClient;
 
@@ -24,6 +26,9 @@ class BlitzGame {
   private currentFps: number = 60;
   private isJoined: boolean = false;
   private lastNetworkTick: number = 0;
+  private killStreak: number = 0;
+  private wasDead: boolean = false;
+  private deathTimestamp: number = 0;
 
   // Authoritative State Buffers
   private latestMatchState: MatchState = {
@@ -89,17 +94,22 @@ class BlitzGame {
     this.map = new NuketownMap(this.scene);
     this.player = new PlayerController(this.camera);
     this.remotePlayers = new RemotePlayerManager(this.scene);
+    this.effects = new EffectsManager(this.scene);
     this.hud = new GameHUD();
+
+    this.player.onWeaponChange = (weaponId) => {
+      this.net.sendWeaponSwitch(weaponId);
+    };
 
     // 6. Network Client Callbacks
     this.net = new NetworkClient({
       onInit: (playerId, team) => {
         console.log(`Assigned Player ID: ${playerId}, Team: ${team}`);
         if (team === 'BRAVO') {
-          this.player.pos.set(0, 1.6, 34);
+          this.player.pos.set(0, 1.65, 34);
           this.player.yaw = 0; // Look toward center (-Z)
         } else {
-          this.player.pos.set(0, 1.6, -34);
+          this.player.pos.set(0, 1.65, -34);
           this.player.yaw = Math.PI; // Look toward center (+Z)
         }
       },
@@ -112,13 +122,33 @@ class BlitzGame {
         const me = snapshot.players.find(p => p.id === this.net.myPlayerId);
         if (me) {
           this.localHp = me.hp;
-          if (me.isDead && this.localHp <= 0) {
-            // Player death state
+          this.player.isDead = !!me.isDead;
+          if (me.isDead && !this.wasDead) {
+            this.wasDead = true;
+            this.deathTimestamp = Date.now();
+            this.killStreak = 0;
+          } else if (!me.isDead && this.wasDead) {
+            // Respawned on server: sync position & weapon ammo
+            this.wasDead = false;
+            this.player.pos.set(me.x, 1.65, me.z);
+            this.player.yaw = me.team === 'BRAVO' ? 0 : Math.PI;
+            this.player.setWeapon(this.player.activeWeaponId, false);
+          }
+
+          if (me.isDead) {
+            const elapsed = (Date.now() - this.deathTimestamp) / 1000;
+            this.hud.setDeadState(true, 3.5 - elapsed);
+          } else {
+            this.hud.setDeadState(false);
           }
         }
 
         // Sync other players and bots
         this.remotePlayers.syncPlayers(snapshot.players, this.net.myPlayerId);
+
+        // Update Scoreboard & Match End state
+        this.hud.updateScoreboard(snapshot.players, snapshot.match, this.net.myPlayerId);
+        this.hud.setMatchEnd(snapshot.match, this.net.myTeam);
 
         // Update Hardpoint Visuals on Map
         this.map.updateActiveHardpoint(
@@ -133,7 +163,17 @@ class BlitzGame {
         if (isKill) {
           // Scavenger perk: +30 reserve ammo on every kill
           this.player.reserveAmmo += 30;
+          this.killStreak++;
+          if (this.killStreak === 2) this.hud.showKillstreakBanner('DOUBLE KILL!');
+          else if (this.killStreak === 3) this.hud.showKillstreakBanner('TRIPLE KILL!');
+          else if (this.killStreak >= 4) this.hud.showKillstreakBanner(`${this.killStreak}x KILLING SPREE!`);
         }
+      },
+      onExplosion: (x, y, z, isFlash) => {
+        this.effects.spawnExplosion(new THREE.Vector3(x, y, z), isFlash);
+      },
+      onFlashed: () => {
+        this.hud.triggerFlashbang();
       },
       onKillfeed: (event) => {
         this.hud.addKillfeedItem(event);
@@ -160,8 +200,7 @@ class BlitzGame {
     };
 
     this.hud.onSelectWeapon = (weaponId) => {
-      this.player.setWeapon(weaponId);
-      this.net.sendWeaponSwitch(weaponId);
+      this.player.setWeapon(weaponId, true);
     };
 
     this.hud.onSettingsChange = (settings) => {
@@ -274,19 +313,30 @@ class BlitzGame {
           }
         }
 
-        // Immediate 0ms Client-Side Predictive Feedback
+        // Immediate 0ms Client-Side Predictive Feedback & Bullet Tracer
         if (hitTargetId) {
           sounds.playHitmarker(false);
           this.hud.showHitmarker(false);
         }
 
+        if (this.player.activeWeaponId !== 'frag' && this.player.activeWeaponId !== 'flashbang' && this.player.activeWeaponId !== 'knife') {
+          const tracerDist = hitTargetId ? closestDist : 55;
+          const tracerStart = fireOrigin.clone().addScaledVector(fireDir, 0.8);
+          tracerStart.y -= 0.12;
+          const tracerEnd = fireOrigin.clone().addScaledVector(fireDir, tracerDist);
+          this.effects.spawnTracer(tracerStart, tracerEnd, this.player.activeWeaponId === 'kar98k' ? 0x38bdf8 : 0xfef08a);
+          this.effects.spawnImpactSparks(tracerEnd, hitTargetId ? 6 : 3);
+        }
+
         this.net.sendFire(fireOrigin, fireDir, this.player.activeWeaponId, hitTargetId);
       }
 
-      // 4. Update Remote Players (Smooth Lerp)
+      // 4. Update Remote Players & Visual Effects
       this.remotePlayers.update(deltaSec);
+      this.effects.update(deltaSec);
 
-      // 5. Update HUD elements
+      // 5. Update HUD elements & Reload Bar
+      this.hud.setReloadProgress(this.player.isReloading, this.player.getReloadProgress());
       this.hud.updateHUD(
         this.localHp,
         this.player.ammo,

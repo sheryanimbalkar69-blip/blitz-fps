@@ -52,6 +52,7 @@ export class NuketownMap {
     this.buildParkedVehicles();
     this.buildDetailedProps();
     this.buildDoomsdayTower();
+    this.buildNuketownSignAndRainbow();
     this.buildHardpointVisuals();
   }
 
@@ -708,6 +709,65 @@ export class NuketownMap {
         mat.color.setHex(0x64748b);
         mat.opacity = 0.08;
       }
+    });
+  }
+
+  private buildNuketownSignAndRainbow() {
+    // 1. Iconic "WELCOME TO NUKETOWN" Population Sign near East cul-de-sac entrance
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 512;
+    signCanvas.height = 256;
+    const ctx = signCanvas.getContext('2d')!;
+    ctx.fillStyle = '#fef3c7';
+    ctx.fillRect(0, 0, 512, 256);
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 14;
+    ctx.strokeRect(10, 10, 492, 236);
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('WELCOME TO', 256, 70);
+    ctx.fillStyle = '#dc2626';
+    ctx.font = 'bold 58px sans-serif';
+    ctx.fillText('NUKETOWN', 256, 138);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 28px monospace';
+    ctx.fillText('POPULATION: 5v5', 256, 200);
+
+    const signTex = new THREE.CanvasTexture(signCanvas);
+    const signBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(3.2, 1.7, 0.14),
+      new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.6 })
+    );
+    signBoard.position.set(13.8, 2.0, -7.8);
+    signBoard.rotation.y = -0.6;
+    signBoard.castShadow = true;
+    this.scene.add(signBoard);
+
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.9 });
+    const postL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.4, 0.14), postMat);
+    postL.position.set(13.0, 1.2, -7.2);
+    const postR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.4, 0.14), postMat);
+    postR.position.set(14.6, 1.2, -8.4);
+    this.scene.add(postL, postR);
+
+    // 2. Iconic Nuketown Double Rainbow Arc over the Northern Horizon
+    const rainbowColors = [0xef4444, 0xf97316, 0xfacc15, 0x22c55e, 0x3b82f6, 0x8b5cf6];
+    rainbowColors.forEach((col, i) => {
+      const rOuter = 58 - i * 1.1;
+      const arc = new THREE.Mesh(
+        new THREE.TorusGeometry(rOuter, 0.45, 6, 48, Math.PI),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22 })
+      );
+      arc.position.set(0, 0, -72);
+      this.scene.add(arc);
+
+      const arc2 = new THREE.Mesh(
+        new THREE.TorusGeometry(rOuter + 14, 0.35, 6, 48, Math.PI),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.12 })
+      );
+      arc2.position.set(6, 0, -82);
+      this.scene.add(arc2);
     });
   }
 }

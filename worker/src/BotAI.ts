@@ -158,16 +158,38 @@ export class BotController {
       bot.yaw = Math.atan2(dx, dz);
     }
 
-    // 3. Move toward target destination (Hardpoint zone or holding position)
+    // 3. Move toward target destination (Hardpoint zone or tactical strafing)
     const distToZone = Math.hypot(targetX - bot.x, targetZ - bot.z);
-    if (distToZone > 1.5) {
-      const moveSpeed = 4.8; // m/s (sprinting tactical movement)
-      const moveX = Math.sin(bot.yaw) * moveSpeed * deltaSec;
-      const moveZ = Math.cos(bot.yaw) * moveSpeed * deltaSec;
-      
-      // Keep inside map bounds
-      bot.x = Math.max(-18, Math.min(18, bot.x + moveX));
-      bot.z = Math.max(-38, Math.min(38, bot.z + moveZ));
+    let moveX = 0;
+    let moveZ = 0;
+
+    if (distToZone > 1.8) {
+      const moveSpeed = nearestEnemy ? 3.4 : 4.8;
+      const dirToZoneYaw = Math.atan2(targetX - bot.x, targetZ - bot.z);
+      moveX += Math.sin(dirToZoneYaw) * moveSpeed * deltaSec;
+      moveZ += Math.cos(dirToZoneYaw) * moveSpeed * deltaSec;
+    }
+
+    // Tactical lateral strafing during gunfights
+    if (nearestEnemy) {
+      const strafeDir = Math.sin(Date.now() * 0.002 + bot.x) > 0 ? 1 : -1;
+      const strafeYaw = bot.yaw + (Math.PI / 2) * strafeDir;
+      moveX += Math.sin(strafeYaw) * 2.2 * deltaSec;
+      moveZ += Math.cos(strafeYaw) * 2.2 * deltaSec;
+    }
+
+    // Simple obstacle avoidance around center Yellow Bus (-3.2, -0.5) & Moving Truck (3.5, 0.5)
+    const nextX = Math.max(-18, Math.min(18, bot.x + moveX));
+    const nextZ = Math.max(-38, Math.min(38, bot.z + moveZ));
+    const hitsBus = nextX > -4.8 && nextX < -1.6 && nextZ > -5.5 && nextZ < 4.5;
+    const hitsTruck = nextX > 1.9 && nextX < 5.1 && nextZ > -4.5 && nextZ < 5.5;
+
+    if (hitsBus || hitsTruck) {
+      // Slide laterally around the vehicle instead of walking through it
+      bot.x = Math.max(-18, Math.min(18, bot.x + (bot.x < 0 ? -3.0 : 3.0) * deltaSec));
+    } else {
+      bot.x = nextX;
+      bot.z = nextZ;
     }
 
     return { shotFired, hitTargetId, damage };

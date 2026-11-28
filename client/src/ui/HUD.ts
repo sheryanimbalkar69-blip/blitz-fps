@@ -60,8 +60,55 @@ export class GameHUD {
         </div>
       </div>
 
-      <!-- Low Health Screen Vignette -->
+      <!-- Low Health Screen Vignette & Flashbang -->
       <div id="damage-vignette"></div>
+      <div id="flash-overlay"></div>
+
+      <!-- Reload Indicator -->
+      <div id="reload-indicator" class="hidden">
+        <div class="reload-text">RELOADING</div>
+        <div class="reload-bar-bg"><div id="reload-bar-fill"></div></div>
+      </div>
+
+      <!-- Killstreak Banner -->
+      <div id="killstreak-banner" class="hidden">DOUBLE KILL!</div>
+
+      <!-- Death / Respawn Overlay -->
+      <div id="death-overlay" class="hidden">
+        <div class="death-title">ELIMINATED</div>
+        <div class="death-sub" id="death-sub-text">Respawning in 3.5s...</div>
+      </div>
+
+      <!-- Tab 5v5 Scoreboard -->
+      <div id="tab-scoreboard" class="hidden">
+        <div class="sb-header">
+          <span style="color:#38bdf8">TEAM ALPHA: <span id="sb-alpha-score">0</span></span>
+          <span style="color:#facc15;font-size:18px;">NUKETOWN // HARDPOINT</span>
+          <span style="color:#fb923c">TEAM BRAVO: <span id="sb-bravo-score">0</span></span>
+        </div>
+        <div class="sb-teams">
+          <div>
+            <div class="sb-team-title" style="color:#38bdf8">ALPHA SQUAD</div>
+            <table class="sb-table">
+              <thead><tr><th>OPERATOR</th><th>K</th><th>D</th><th>HP</th><th>SCORE</th></tr></thead>
+              <tbody id="sb-alpha-body"></tbody>
+            </table>
+          </div>
+          <div>
+            <div class="sb-team-title" style="color:#fb923c">BRAVO SQUAD</div>
+            <table class="sb-table">
+              <thead><tr><th>OPERATOR</th><th>K</th><th>D</th><th>HP</th><th>SCORE</th></tr></thead>
+              <tbody id="sb-bravo-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Match End Overlay -->
+      <div id="match-end-overlay" class="hidden">
+        <div class="match-end-title" id="match-end-title">VICTORY</div>
+        <div class="match-end-sub" id="match-end-sub">Next match starting shortly...</div>
+      </div>
 
       <!-- Top Hardpoint & Match Scoreboard -->
       <div id="scoreboard-top">
@@ -222,6 +269,15 @@ export class GameHUD {
         }
       } else if (e.code === 'Escape') {
         this.toggleSettingsModal();
+      } else if (e.code === 'Tab') {
+        e.preventDefault();
+        document.getElementById('tab-scoreboard')?.classList.remove('hidden');
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Tab') {
+        document.getElementById('tab-scoreboard')?.classList.add('hidden');
       }
     });
 
@@ -599,5 +655,97 @@ export class GameHUD {
     ctx.fillText('S', cx, h - 3);
     ctx.fillText('W', 7, cy + 3);
     ctx.fillText('E', w - 7, cy + 3);
+  }
+
+  private killstreakTimeout: any = null;
+
+  public showKillstreakBanner(label: string) {
+    const el = document.getElementById('killstreak-banner');
+    if (!el) return;
+    el.textContent = label;
+    el.classList.remove('hidden');
+    if (this.killstreakTimeout) clearTimeout(this.killstreakTimeout);
+    this.killstreakTimeout = setTimeout(() => {
+      el.classList.add('hidden');
+    }, 2200);
+  }
+
+  public triggerFlashbang() {
+    const el = document.getElementById('flash-overlay');
+    if (!el) return;
+    el.style.opacity = '0.96';
+    setTimeout(() => {
+      el.style.transition = 'opacity 1.8s ease-out';
+      el.style.opacity = '0';
+      setTimeout(() => {
+        el.style.transition = 'opacity 0.15s ease-out';
+      }, 1850);
+    }, 600);
+  }
+
+  public setDeadState(isDead: boolean, remainingSec: number = 3.5) {
+    const el = document.getElementById('death-overlay');
+    const sub = document.getElementById('death-sub-text');
+    if (!el) return;
+    if (isDead) {
+      el.classList.remove('hidden');
+      if (sub) sub.textContent = `Respawning in ${Math.max(0.5, remainingSec).toFixed(1)}s...`;
+    } else {
+      el.classList.add('hidden');
+    }
+  }
+
+  public setReloadProgress(isReloading: boolean, progress01: number = 0) {
+    const el = document.getElementById('reload-indicator');
+    const fill = document.getElementById('reload-bar-fill');
+    if (!el || !fill) return;
+    if (isReloading) {
+      el.classList.remove('hidden');
+      fill.style.width = `${Math.min(100, Math.max(0, progress01 * 100))}%`;
+    } else {
+      el.classList.add('hidden');
+      fill.style.width = '0%';
+    }
+  }
+
+  public updateScoreboard(players: any[], match: MatchState, myId: string) {
+    const sbAlphaScore = document.getElementById('sb-alpha-score');
+    const sbBravoScore = document.getElementById('sb-bravo-score');
+    if (sbAlphaScore) sbAlphaScore.textContent = String(match.alphaScore);
+    if (sbBravoScore) sbBravoScore.textContent = String(match.bravoScore);
+
+    const alphaBody = document.getElementById('sb-alpha-body');
+    const bravoBody = document.getElementById('sb-bravo-body');
+    if (!alphaBody || !bravoBody) return;
+
+    const renderRows = (list: any[]) =>
+      list
+        .slice()
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .map(p => {
+          const isMe = p.id === myId ? ' class="sb-me"' : '';
+          return `<tr${isMe}><td>${p.name}</td><td>${p.kills || 0}</td><td>${p.deaths || 0}</td><td>${p.hardpointSecs || 0}s</td><td>${p.score || 0}</td></tr>`;
+        })
+        .join('');
+
+    alphaBody.innerHTML = renderRows(players.filter(p => p.team === 'ALPHA'));
+    bravoBody.innerHTML = renderRows(players.filter(p => p.team === 'BRAVO'));
+  }
+
+  public setMatchEnd(match: MatchState, myTeam: string) {
+    const overlay = document.getElementById('match-end-overlay');
+    const title = document.getElementById('match-end-title');
+    const sub = document.getElementById('match-end-sub');
+    if (!overlay || !title || !sub) return;
+
+    if (match.status === 'ENDED' && match.winner) {
+      overlay.classList.remove('hidden');
+      const won = match.winner === myTeam;
+      title.textContent = won ? 'VICTORY' : 'DEFEAT';
+      title.style.color = won ? '#22c55e' : '#ef4444';
+      sub.textContent = `ALPHA ${match.alphaScore} — ${match.bravoScore} BRAVO · Next match starting shortly...`;
+    } else {
+      overlay.classList.add('hidden');
+    }
   }
 }

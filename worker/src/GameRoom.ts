@@ -247,26 +247,72 @@ export class GameRoom {
   }
 
   private handlePlayerShot(shooter: PlayerNetState, data: any) {
-    if (shooter.isDead || shooter.isReloading || shooter.ammo <= 0) return;
-    const weapon = WEAPON_REGISTRY[shooter.activeWeapon] || WEAPON_REGISTRY['m4a1'];
+    if (shooter.isDead || shooter.isReloading || shooter.ammo <= 0 || this.matchState.status !== 'ACTIVE') return;
+    const weaponId = data.weaponId || shooter.activeWeapon;
+    const weapon = WEAPON_REGISTRY[weaponId] || WEAPON_REGISTRY['m4a1'];
+    shooter.activeWeapon = weapon.id;
     shooter.ammo--;
 
     const origin = { x: data.originX || shooter.x, y: (data.originY || shooter.y) + 1.5, z: data.originZ || shooter.z };
-    const dir = { x: data.dirX, y: data.dirY, z: data.dirZ };
+    const dir = { x: data.dirX || 0, y: data.dirY || 0, z: data.dirZ || -1 };
 
     const targets: PlayerNetState[] = [
       ...Array.from(this.players.values()),
       ...Array.from(this.bots.values())
     ].filter(p => p.id !== shooter.id && p.team !== shooter.team && !p.isDead);
 
+    // 0. Handle Frag Grenade & Flashbang Explosives
+    if (weapon.id === 'frag' || weapon.id === 'flashbang') {
+      const throwDist = Math.min(16, Math.max(5, 11 + dir.y * 8));
+      const impactX = Math.max(-18, Math.min(18, origin.x + dir.x * throwDist));
+      const impactZ = Math.max(-38, Math.min(38, origin.z + dir.z * throwDist));
+      const radius = weapon.blastRadius || 6.0;
+
+      this.broadcast({
+        type: 'EXPLOSION',
+        x: impactX,
+        y: 0.4,
+        z: impactZ,
+        isFlash: weapon.id === 'flashbang'
+      });
+
+      for (const target of targets) {
+        const d = Math.hypot(target.x - impactX, target.z - impactZ);
+        if (d <= radius) {
+          if (weapon.id === 'frag') {
+            const splashDmg = Math.round(weapon.damage * (1 - (d / (radius * 1.25))));
+            if (splashDmg > 0) this.applyDamage(target, splashDmg, shooter);
+          } else {
+            // Flashbang blinds nearby human players
+            for (const [ws, sess] of this.sessions.entries()) {
+              if (sess.playerId === target.id) {
+                ws.send(JSON.stringify({ type: 'FLASHED' }));
+                break;
+              }
+            }
+          }
+        }
+      }
+      return;
+    }
+
+    // Helper for weapon damage (handles shotgun pellets vs single bullets)
+    const computeDamage = (dist: number): number => {
+      if (weapon.isPellet && weapon.pelletCount) {
+        const falloff = Math.max(0.25, 1 - dist / (weapon.range + 2));
+        const pelletsHit = Math.max(1, Math.round(weapon.pelletCount * falloff * 0.85));
+        return weapon.damage * pelletsHit;
+      }
+      return weapon.damage;
+    };
+
     // 1. Client-Assisted Lag Compensation: If client raycast landed on an entity
     if (data.clientHitId) {
       const hitTarget = targets.find(t => t.id === data.clientHitId);
       if (hitTarget) {
         const dist = Math.hypot(hitTarget.x - origin.x, hitTarget.z - origin.z);
-        // Generous lag compensation rewind tolerance (up to 3.5m rewind window)
         if (dist <= weapon.range + 5.0) {
-          this.applyDamage(hitTarget, weapon.damage, shooter);
+          this.applyDamage(hitTarget, computeDamage(dist), shooter);
           return;
         }
       }
@@ -286,7 +332,7 @@ export class GameRoom {
         // Lag-friendly angle tolerance
         const angleThreshold = Math.max(0.92, 1.0 - (1.2 / Math.max(dist, 1)));
         if (dot >= angleThreshold) {
-          this.applyDamage(target, weapon.damage, shooter);
+          this.applyDamage(target, computeDamage(dist), shooter);
           break;
         }
       }
@@ -559,6 +605,43 @@ export class GameRoom {
       }
     } catch (e) {
       console.error('Failed to save match to D1:', e);
+    }
+
+    // Automatically start next match after 10-second post-match screen
+    setTimeout(() => {
+      this.resetMatch();
+    }, 10000);
+  }
+
+  private resetMatch() {
+    this.matchState = {
+      status: 'ACTIVE',
+      alphaScore: 0,
+      bravoScore: 0,
+      remainingMatchTime: 600
+    };
+    this.currentZoneIndex = 0;
+    this.zoneTimer = 60.0;
+    this.hardpointState = {
+      zoneIndex: 0,
+      zoneName: NUKETOWN_HARDPOINT_ZONES[0].name,
+      remainingTime: 60,
+      status: 'EMPTY',
+      controllingTeam: null
+    };
+
+    const allEntities = [...Array.from(this.players.values()), ...Array.from(this.bots.values())];
+    for (const p of allEntities) {
+      p.kills = 0;
+      p.deaths = 0;
+      p.score = 0;
+      p.hardpointSecs = 0;
+      p.isDead = false;
+      p.hp = p.maxHp;
+      const isAlpha = p.team === 'ALPHA';
+      p.z = isAlpha ? -34 - Math.random() * 2 : 34 + Math.random() * 2;
+      p.x = (Math.random() - 0.5) * 8;
+      p.y = p.isBot ? 0.0 : 1.65;
     }
   }
 
